@@ -64,10 +64,15 @@ class IssueStore:
     self.issues[branch] = issue
     self.FlushIssues()
 
+  def DropBranchIssue(self, branch):
+    del self.issues[branch]
+    self.FlushIssues()
+
+issuestore = IssueStore()
+
 
 class Changelist:
   def __init__(self):
-    self.issuestore = IssueStore()
     self.server = None
     self.branch = None
     self.has_issue = False
@@ -94,7 +99,7 @@ class Changelist:
 
   def GetIssue(self):
     if not self.has_issue:
-      self.issue = self.issuestore.LookupIssue(self.GetBranchRef())
+      self.issue = issuestore.LookupIssue(self.GetBranchRef())
       self.has_issue = True
     return self.issue
 
@@ -114,7 +119,7 @@ class Changelist:
     return self.description
 
   def SetIssue(self, issue):
-    self.issuestore.SetIssue(self.GetBranchRef(), issue)
+    issuestore.SetIssue(self.GetBranchRef(), issue)
 
 
 def CmdStatus(cl, args):
@@ -166,6 +171,7 @@ def CmdDCommit(cl, args):
   RunCommand(['git', 'svn', 'dcommit'])
   RunCommand(['git', 'checkout', '-q', cl.GetBranch()])
   RunCommand(['git', 'branch', '-D', MERGE_BRANCH])
+  issuestore.DropBranchIssue(cl.GetBranchRef())
 
 
 COMMANDS = [

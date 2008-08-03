@@ -1,11 +1,14 @@
 #!/bin/bash
 
+set -e
+
 . ./test-lib.sh
 
 setup_initsvn
 setup_gitsvn
 
 (
+  set -e
   cd git-svn
   git checkout -q -b work
   echo "some work done on a branch" >> test
@@ -41,6 +44,14 @@ setup_gitsvn
   git svn -q rebase >/dev/null 2>&1
   test_expect_success "dcommitted code has proper description" \
     "git show | grep -q 'foo-quux'"
+
+  test_expect_success "issue is no longer in branch mapping" \
+    "diff -q .git/cl-mapping /dev/null"
 )
+SUCCESS=$?
 
 cleanup
+
+if [ $SUCCESS == 0 ]; then
+  echo PASS
+fi

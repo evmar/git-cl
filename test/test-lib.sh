@@ -46,8 +46,10 @@ cleanup() {
 test_expect_success() {
   set +e
   eval "$2"
-  if [ $? != 0 ]; then
-    echo "FAILURE: $1"
-  fi
+  exit_code=$?
   set -e
+  if [ $exit_code != 0 ]; then
+    echo "FAILURE: $1"
+    return $exit_code
+  fi
 }
