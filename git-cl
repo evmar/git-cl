@@ -1,0 +1,74 @@
+#!/usr/bin/python
+
+import sys
+
+def RunCommand(cmd, error_message=None):
+  proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+  output = proc.communicate()[0]
+  if proc.returncode != 0:
+    print >>sys.stderr, 'Command %s failed.' % (' '.join(cmd))
+    if error_message:
+      print >>sys.stderr, error_message
+    sys.exit(1)
+  return output
+
+class Changelist:
+  def __init__(self):
+    self.server = None
+    self.issue = None
+    self.description = None
+
+  def GetServer(self):
+    if not self.server:
+      self.server = RunCommand(['git', 'config', '--get', 'rietveld.server'],
+                               error_message='You must set your server with ' +
+                                             '"git config --set rietveld.' +
+                                             'server foo.bar.com:123".')
+    return self.server
+
+  def GetIssue(self):
+
+  def GetDescription(self):
+    if not self.description:
+      url = 'http://%s/%d/description' % (self.GetServer(), self.issue)
+      self.description = urllib2.urlopen(url).read()
+    return self.description
+
+def CmdUpload(args):
+  pass
+def CmdEdit(args):
+  pass
+def CmdDCommit(args):
+  pass
+
+COMMANDS = [
+  ('upload',  'upload a changelist to codereview', CmdUpload),
+  ('edit',    'edit a changelist description',     CmdEdit),
+  ('dcommit', 'commit a changelist via git-svn',   CmdDCommit)
+]
+
+def Usage(name):
+  print "usage: %s <command>" % name
+  print "commands are:"
+  for name, desc, _ in COMMANDS:
+    print "  %-10s %s" % (name, desc)
+  sys.exit(1)
+
+def main(argv):
+  cl = Changelist()
+  print cl.GetDescription()
+
+  return 1
+  if len(argv) < 2:
+    Usage(argv[0])
+
+  command = argv[1]
+  for name, _, func in COMMANDS:
+    if name == command:
+      return func(argv[2:])
+  print "unknown command: %s"
+  Usage(argv[0])
+
+
+if __name__ == '__main__':
+  sys.exit(main(sys.argv))
