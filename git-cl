@@ -1,72 +1,197 @@
 #!/usr/bin/python
 
+import os
+import subprocess
 import sys
+import textwrap
+import upload
+import urllib2
 
-def RunCommand(cmd, error_message=None):
+VERBOSE=False
+
+def RunCommand(cmd, error_message=None, exit_code=False):
+  if VERBOSE:
+    print >>sys.stderr, ' '.join(cmd)
   proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
   output = proc.communicate()[0]
+  if exit_code:
+    return proc.returncode
   if proc.returncode != 0:
-    print >>sys.stderr, 'Command %s failed.' % (' '.join(cmd))
+    print >>sys.stderr, 'Command "%s" failed.' % (' '.join(cmd))
     if error_message:
       print >>sys.stderr, error_message
     sys.exit(1)
   return output
 
+
+class IssueStore:
+  def __init__(self):
+    self.storepath = None
+    self.issues = None
+
+  def GetStorePath(self):
+    if not self.storepath:
+      gitdir = RunCommand(['git', 'rev-parse', '--git-dir']).strip()
+      self.storepath = os.path.join(gitdir, 'cl-mapping')
+    return self.storepath
+
+  def LoadIssues(self):
+    self.issues = {}
+    if not os.path.exists(self.GetStorePath()):
+      return
+    store = open(self.GetStorePath(), 'r')
+    for line in store:
+      branch, issue = line.split()
+      self.issues[branch] = issue
+    store.close()
+
+  def LookupIssue(self, branch):
+    if not self.issues:
+      self.LoadIssues()
+    if branch in self.issues:
+      return self.issues[branch]
+    return None
+
+  def FlushIssues(self):
+    store = open(self.GetStorePath(), 'w')
+    for branch, issue in self.issues.items():
+      store.write('%s %s\n' % (branch, issue))
+    store.close()
+
+  def SetIssue(self, branch, issue):
+    if not self.issues:
+      self.LoadIssues()
+    self.issues[branch] = issue
+    self.FlushIssues()
+
+
 class Changelist:
   def __init__(self):
+    self.issuestore = IssueStore()
     self.server = None
-    self.issue = None
+    self.branch = None
+    self.has_issue = False
+    self.issue = self.GetIssue()
+    self.has_description = False
     self.description = None
 
   def GetServer(self):
     if not self.server:
-      self.server = RunCommand(['git', 'config', '--get', 'rietveld.server'],
-                               error_message='You must set your server with ' +
-                                             '"git config --set rietveld.' +
-                                             'server foo.bar.com:123".')
+      error_message = ('You must set your server with ' +
+                       '"git config rietveld.server <hostname>[:<port>]".')
+      self.server = RunCommand(['git', 'config', 'rietveld.server'],
+                               error_message=error_message).strip()
     return self.server
 
-  def GetIssue(self):
+  def GetBranch(self):
+    if not self.branch:
+      self.branchref = RunCommand(['git', 'symbolic-ref', 'HEAD']).strip()
+      self.branch = self.branchref.replace('refs/heads/', '')
+    return self.branch
+  def GetBranchRef(self):
+    self.GetBranch()
+    return self.branchref
 
-  def GetDescription(self):
-    if not self.description:
-      url = 'http://%s/%d/description' % (self.GetServer(), self.issue)
-      self.description = urllib2.urlopen(url).read()
+  def GetIssue(self):
+    if not self.has_issue:
+      self.issue = self.issuestore.LookupIssue(self.GetBranchRef())
+      self.has_issue = True
+    return self.issue
+
+  def GetIssueURL(self):
+    return 'http://%s/%s' % (self.GetServer(), self.GetIssue())
+
+  def GetDescription(self, pretty=False):
+    if not self.has_description:
+      if self.GetIssue():
+        url = self.GetIssueURL() + '/description'
+        self.description = urllib2.urlopen(url).read()
+      self.has_description = True
+    if pretty:
+      wrapper = textwrap.TextWrapper()
+      wrapper.initial_indent = wrapper.subsequent_indent = '  '
+      return wrapper.fill(self.description)
     return self.description
 
-def CmdUpload(args):
-  pass
-def CmdEdit(args):
-  pass
-def CmdDCommit(args):
-  pass
+  def SetIssue(self, issue):
+    self.issuestore.SetIssue(self.GetBranchRef(), issue)
+
+
+def CmdStatus(cl, args):
+  print 'Branch:', cl.GetBranch()
+  if not cl.GetIssue():
+    print 'No issue assigned.'
+    return 0
+  print 'Issue number:', cl.GetIssue(), '(%s)' % cl.GetIssueURL()
+  print 'Issue description:'
+  print cl.GetDescription(pretty=True)
+
+def CmdUpload(cl, args):
+  upload_args = ['--local_base']
+  upload_args.extend(['--server', cl.GetServer()])
+  if cl.GetIssue():
+    upload_args.extend(['--issue', cl.GetIssue()])
+  issue = upload.RealMain(['upload'] + upload_args + args)
+  if not cl.GetIssue():
+    cl.SetIssue(issue)
+
+
+def CmdDCommit(cl, args):
+  # It is important to have these checks at the top.  Not only for user
+  # convenience, but also because the cl object then caches the correct values
+  # of these fields even as we're juggling branches for setting up the commit.
+  if not cl.GetIssue():
+    print 'Current issue unknown -- has this branch been uploaded?'
+    return 1
+  if not cl.GetDescription():
+    print 'No description set.'
+    print 'Visit %s/edit to set it.' % (cl.GetIssueURL())
+    return 1
+
+  if RunCommand(['git', 'diff-index', 'HEAD']):
+    print 'Cannot dcommit with a dirty tree.'
+    return 1
+
+  print 'Description:', repr(cl.GetDescription())
+
+  # We want to squash all this branch's commits into one commit with the
+  # proper description.
+  MERGE_BRANCH = 'git-cl-commit'
+  if RunCommand(['git', 'show-ref', '--quiet', '--verify',
+                 'refs/heads/' + MERGE_BRANCH], exit_code=True) == 0:
+    RunCommand(['git', 'branch', '-D', MERGE_BRANCH])
+  RunCommand(['git', 'checkout', '-q', '-b', MERGE_BRANCH, 'master'])
+  RunCommand(['git', 'merge', '--squash', cl.GetBranchRef()])
+  RunCommand(['git', 'commit', '-m', cl.GetDescription()])
+  RunCommand(['git', 'svn', 'dcommit'])
+  RunCommand(['git', 'checkout', '-q', cl.GetBranch()])
+  RunCommand(['git', 'branch', '-D', MERGE_BRANCH])
+
 
 COMMANDS = [
-  ('upload',  'upload a changelist to codereview', CmdUpload),
-  ('edit',    'edit a changelist description',     CmdEdit),
-  ('dcommit', 'commit a changelist via git-svn',   CmdDCommit)
+  ('status',  'show status of current changelist',           CmdStatus),
+  ('upload',  'upload the current changelist to codereview', CmdUpload),
+  ('dcommit', 'commit the current changelist via git-svn',   CmdDCommit),
 ]
 
+
 def Usage(name):
-  print "usage: %s <command>" % name
-  print "commands are:"
+  print 'usage: %s <command>' % name
+  print 'commands are:'
   for name, desc, _ in COMMANDS:
-    print "  %-10s %s" % (name, desc)
+    print '  %-10s %s' % (name, desc)
   sys.exit(1)
 
-def main(argv):
-  cl = Changelist()
-  print cl.GetDescription()
 
-  return 1
+def main(argv):
   if len(argv) < 2:
     Usage(argv[0])
 
   command = argv[1]
   for name, _, func in COMMANDS:
     if name == command:
-      return func(argv[2:])
-  print "unknown command: %s"
+      return func(Changelist(), argv[2:])
+  print 'unknown command: %s'
   Usage(argv[0])
 
 
