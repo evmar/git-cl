@@ -132,6 +132,7 @@ def CmdStatus(cl, args):
   print cl.GetDescription(pretty=True)
 
 def CmdUpload(cl, args):
+  subprocess.call(['git', 'diff', '--stat'] + args)
   upload_args = ['--local_base']
   upload_args.extend(['--server', cl.GetServer()])
   if cl.GetIssue():
