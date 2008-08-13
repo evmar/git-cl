@@ -204,7 +204,7 @@ def main(argv):
   for name, _, func in COMMANDS:
     if name == command:
       return func(Changelist(), argv[2:])
-  print 'unknown command: %s'
+  print 'unknown command: %s' % command
   Usage(argv[0])
 
 
