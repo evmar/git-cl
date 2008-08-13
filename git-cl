@@ -24,6 +24,30 @@ def RunCommand(cmd, error_message=None, exit_code=False):
   return output
 
 
+class Settings:
+  def __init__(self):
+    self.server = None
+    self.cc = None
+
+  def GetServer(self):
+    if not self.server:
+      error_message = ('You must set your server with ' +
+                       '"git config rietveld.server <hostname>[:<port>]".')
+      self.server = self._GetConfig('rietveld.server',
+                                    error_message=error_message)
+    return self.server
+
+  def GetCCList(self):
+    if self.cc is None:
+      self.cc = self._GetConfig('rietveld.cc')
+    return self.cc
+
+  def _GetConfig(self, param, **kwargs):
+    return RunCommand(['git', 'config', param], **kwargs).strip()
+
+settings = Settings()
+
+
 class IssueStore:
   def __init__(self):
     self.storepath = None
@@ -73,20 +97,11 @@ issuestore = IssueStore()
 
 class Changelist:
   def __init__(self):
-    self.server = None
     self.branch = None
     self.has_issue = False
     self.issue = self.GetIssue()
     self.has_description = False
     self.description = None
-
-  def GetServer(self):
-    if not self.server:
-      error_message = ('You must set your server with ' +
-                       '"git config rietveld.server <hostname>[:<port>]".')
-      self.server = RunCommand(['git', 'config', 'rietveld.server'],
-                               error_message=error_message).strip()
-    return self.server
 
   def GetBranch(self):
     if not self.branch:
@@ -104,7 +119,7 @@ class Changelist:
     return self.issue
 
   def GetIssueURL(self):
-    return 'http://%s/%s' % (self.GetServer(), self.GetIssue())
+    return 'http://%s/%s' % (settings.GetServer(), self.GetIssue())
 
   def GetDescription(self, pretty=False):
     if not self.has_description:
@@ -131,10 +146,12 @@ def CmdStatus(cl, args):
   print 'Issue description:'
   print cl.GetDescription(pretty=True)
 
+
 def CmdUpload(cl, args):
   subprocess.call(['git', 'diff', '--stat'] + args)
   upload_args = ['--local_base']
-  upload_args.extend(['--server', cl.GetServer()])
+  upload_args.extend(['--server', settings.GetServer()])
+  upload_args.extend(['--cc', settings.GetCCList()])
   if cl.GetIssue():
     upload_args.extend(['--issue', cl.GetIssue()])
   issue = upload.RealMain(['upload'] + upload_args + args)
