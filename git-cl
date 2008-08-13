@@ -162,14 +162,20 @@ def CmdDCommit(cl, args):
 
   # We want to squash all this branch's commits into one commit with the
   # proper description.
+  # We do this by doing a "merge --squash" into a new commit branch, then
+  # dcommitting that.
   MERGE_BRANCH = 'git-cl-commit'
+  # Delete the merge branch if it already exists.
   if RunCommand(['git', 'show-ref', '--quiet', '--verify',
                  'refs/heads/' + MERGE_BRANCH], exit_code=True) == 0:
     RunCommand(['git', 'branch', '-D', MERGE_BRANCH])
-  RunCommand(['git', 'checkout', '-q', '-b', MERGE_BRANCH, 'master'])
+  # Stuff our change into the merge branch.
+  RunCommand(['git', 'checkout', '-q', '-b', MERGE_BRANCH, 'trunk'])
   RunCommand(['git', 'merge', '--squash', cl.GetBranchRef()])
   RunCommand(['git', 'commit', '-m', cl.GetDescription()])
+  # dcommit the merge branch.
   RunCommand(['git', 'svn', 'dcommit'])
+  # And then swap back to the original branch and clean up.
   RunCommand(['git', 'checkout', '-q', cl.GetBranch()])
   RunCommand(['git', 'branch', '-D', MERGE_BRANCH])
   issuestore.DropBranchIssue(cl.GetBranchRef())
