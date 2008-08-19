@@ -9,14 +9,14 @@ import urllib2
 
 VERBOSE=False
 
-def RunCommand(cmd, error_message=None, exit_code=False):
+def RunCommand(cmd, error_ok=False, error_message=None, exit_code=False):
   if VERBOSE:
     print >>sys.stderr, ' '.join(cmd)
   proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
   output = proc.communicate()[0]
   if exit_code:
     return proc.returncode
-  if proc.returncode != 0:
+  if not error_ok and proc.returncode != 0:
     print >>sys.stderr, 'Command "%s" failed.' % (' '.join(cmd))
     if error_message:
       print >>sys.stderr, error_message
@@ -39,7 +39,7 @@ class Settings:
 
   def GetCCList(self):
     if self.cc is None:
-      self.cc = self._GetConfig('rietveld.cc')
+      self.cc = self._GetConfig('rietveld.cc', error_ok=True)
     return self.cc
 
   def _GetConfig(self, param, **kwargs):
