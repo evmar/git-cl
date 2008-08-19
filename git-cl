@@ -20,6 +20,8 @@ def RunCommand(cmd, error_ok=False, error_message=None, exit_code=False):
     print >>sys.stderr, 'Command "%s" failed.' % (' '.join(cmd))
     if error_message:
       print >>sys.stderr, error_message
+    else:
+      print >>sys.stderr, output
     sys.exit(1)
   return output
 
@@ -147,6 +149,12 @@ def CmdStatus(cl, args):
   print cl.GetDescription(pretty=True)
 
 
+def CmdIssue(cl, args):
+  if len(args) > 0:
+    cl.SetIssue(int(args[0]))
+  print 'Issue number:', cl.GetIssue(), '(%s)' % cl.GetIssueURL()
+
+
 def CmdUpload(cl, args):
   subprocess.call(['git', 'diff', '--stat'] + args)
   upload_args = ['--local_base']
@@ -200,6 +208,7 @@ def CmdDCommit(cl, args):
 
 COMMANDS = [
   ('status',  'show status of current changelist',           CmdStatus),
+  ('issue',   'show/set current branch\'s issue number',     CmdIssue),
   ('upload',  'upload the current changelist to codereview', CmdUpload),
   ('dcommit', 'commit the current changelist via git-svn',   CmdDCommit),
 ]
