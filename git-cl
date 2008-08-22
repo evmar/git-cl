@@ -137,6 +137,7 @@ class Changelist:
 
   def SetIssue(self, issue):
     issuestore.SetIssue(self.GetBranchRef(), issue)
+    self.has_issue = False
 
   def CloseIssue(self):
     def GetUserCredentials():
