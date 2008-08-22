@@ -138,6 +138,18 @@ class Changelist:
   def SetIssue(self, issue):
     issuestore.SetIssue(self.GetBranchRef(), issue)
 
+  def CloseIssue(self):
+    def GetUserCredentials():
+      email = raw_input('Email: ').strip()
+      password = getpass.getpass('Password for %s: ' % email)
+      return email, password
+
+    rpc_server = upload.HttpRpcServer(SERVER,
+                                      GetUserCredentials,
+                                      host_override=SERVER,
+                                      save_cookies=True)
+    rpc_server.Send('/' + self.GetIssue() + '/close')
+
 
 def CmdStatus(cl, args):
   print 'Branch:', cl.GetBranch()
@@ -204,6 +216,7 @@ def CmdDCommit(cl, args):
   RunCommand(['git', 'checkout', '-q', cl.GetBranch()])
   RunCommand(['git', 'branch', '-D', MERGE_BRANCH])
   issuestore.DropBranchIssue(cl.GetBranchRef())
+  cl.CloseIssue()
 
 
 COMMANDS = [
