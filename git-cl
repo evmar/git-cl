@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -145,14 +146,15 @@ class Changelist:
       password = getpass.getpass('Password for %s: ' % email)
       return email, password
 
-    rpc_server = upload.HttpRpcServer(SERVER,
+    rpc_server = upload.HttpRpcServer(settings.GetServer(),
                                       GetUserCredentials,
-                                      host_override=SERVER,
+                                      host_override=settings.GetServer(),
                                       save_cookies=True)
     rpc_server.Send('/' + self.GetIssue() + '/close')
 
 
-def CmdStatus(cl, args):
+def CmdStatus(args):
+  cl = Changelist()
   print 'Branch:', cl.GetBranch()
   if not cl.GetIssue():
     print 'No issue assigned.'
@@ -162,13 +164,15 @@ def CmdStatus(cl, args):
   print cl.GetDescription(pretty=True)
 
 
-def CmdIssue(cl, args):
+def CmdIssue(args):
+  cl = Changelist()
   if len(args) > 0:
     cl.SetIssue(int(args[0]))
   print 'Issue number:', cl.GetIssue(), '(%s)' % cl.GetIssueURL()
 
 
-def CmdUpload(cl, args):
+def CmdUpload(args):
+  cl = Changelist()
   subprocess.call(['git', 'diff', '--stat'] + args)
   upload_args = ['--local_base']
   upload_args.extend(['--server', settings.GetServer()])
@@ -180,7 +184,8 @@ def CmdUpload(cl, args):
     cl.SetIssue(issue)
 
 
-def CmdDCommit(cl, args):
+def CmdDCommit(args):
+  cl = Changelist()
   # It is important to have these checks at the top.  Not only for user
   # convenience, but also because the cl object then caches the correct values
   # of these fields even as we're juggling branches for setting up the commit.
@@ -220,11 +225,38 @@ def CmdDCommit(cl, args):
   cl.CloseIssue()
 
 
+def CmdPatch(args):
+  def Usage():
+    print 'usage: patch <url>'
+    return 1
+  if len(args) != 1:
+    return Usage()
+  url = args[0]
+  match = re.search(r'issue(\d+)', url)
+  if not match:
+    print "couldn't find issue number in url!"
+    return Usage()
+  issue = int(match.group(1))
+  #origbranch = RunCommand(['git', 'symbolic-ref', 'HEAD']).strip()
+  newbranch = 'issue_%d' % issue
+  RunCommand(['git', 'checkout', '-b', newbranch, 'trunk'])
+  try:
+    top = RunCommand(['git', 'rev-parse', '--show-cdup']).strip()
+    if top:
+      os.chdir(top)
+    subprocess.check_call('curl --silent %s | patch -p0' % url, shell=True)
+    RunCommand(['git', 'commit', '-a', '-m', 'patched from issue %d' % issue])
+  except:
+    #RunCommand(['git', 'checkout', '-f', origbranch])
+    raise
+
+
 COMMANDS = [
   ('status',  'show status of current changelist',           CmdStatus),
   ('issue',   'show/set current branch\'s issue number',     CmdIssue),
   ('upload',  'upload the current changelist to codereview', CmdUpload),
   ('dcommit', 'commit the current changelist via git-svn',   CmdDCommit),
+  ('patch',   'patch in a code review',                      CmdPatch),
 ]
 
 
@@ -243,7 +275,7 @@ def main(argv):
   command = argv[1]
   for name, _, func in COMMANDS:
     if name == command:
-      return func(Changelist(), argv[2:])
+      return func(argv[2:])
   print 'unknown command: %s' % command
   Usage(argv[0])
 
