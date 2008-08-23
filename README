@@ -1,0 +1,46 @@
+# git-cl -- a git-command for integrating reviews on Rietveld
+# Copyright (C) 2008 Evan Martin <martine@danga.com>
+
+== Background
+Rietveld, also known as http://codereview.appspot.com, is a nice tool
+for code reviews.  You upload a patch (and some other data) and it lets
+others comment on your patch.
+
+Rietveld's patch uploader has support for Git (implemented by me).  But
+you still need to keep track of the review issue number for subsequent
+reviews.  git-cl brings the Rietveld integration more closely into Git.
+
+== Install
+Copy (symlink) it into your path somewhere, along with Rietveld
+upload.py.
+
+== Setup
+Tell it which server to upload to:
+$ git config rietveld.server codereview.appspot.com
+
+Optionally tell it a default CC mailing list for new reviews:
+$ git config rietveld.cc my-code-reviews@wherever.com
+
+== How to use it
+Make a new branch.  Write some code.  Send it for review:
+$ git cl upload trunk...
+The last argument is passed to "git diff".
+You'll be asked some questions, and the review issue number will be
+cached in your .git directory, so subsequent calls to upload will
+be on the same review.
+
+Review looks good?  Commit the code:
+$ git cl dcommit
+This does a git-svn dcommit, with a twist: all changes on the branch
+will be squashed into a single commit, and the description of the commit
+is taken directly from the Rietveld description.
+
+== Extra commands
+Print some status info:
+$ git cl status
+
+Edit the issue association on a branch:
+$ git cl issue 1234
+
+Patch in a review as a new branch:
+$ git cl patch <url to full patch>
