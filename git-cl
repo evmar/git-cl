@@ -2,6 +2,7 @@
 # git-cl -- a git-command for integrating reviews on Rietveld
 # Copyright (C) 2008 Evan Martin <martine@danga.com>
 
+import getpass
 import os
 import re
 import subprocess
