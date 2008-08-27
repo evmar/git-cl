@@ -35,6 +35,7 @@ class Settings:
   def __init__(self):
     self.server = None
     self.cc = None
+    self.svn_branch = None
 
   def GetServer(self):
     if not self.server:
@@ -48,6 +49,12 @@ class Settings:
     if self.cc is None:
       self.cc = self._GetConfig('rietveld.cc', error_ok=True)
     return self.cc
+
+  def GetSVNBranch(self):
+    if self.svn_branch is None:
+      # Fetch config is a refspec, of the form remotename:localname.
+      self.svn_branch = self._GetConfig('svn-remote.svn.fetch').split(':')[1]
+    return self.svn_branch
 
   def _GetConfig(self, param, **kwargs):
     return RunGit(['config', param], **kwargs).strip()
@@ -177,6 +184,9 @@ def CmdIssue(args):
 
 def CmdUpload(args):
   cl = Changelist()
+  if not args:
+    # Default to diffing against the SVN trunk.
+    args = [settings.GetSVNBranch()]
   subprocess.call(['git', 'diff', '--stat'] + args)
   upload_args = ['--local_base']
   upload_args.extend(['--server', settings.GetServer()])
@@ -217,7 +227,7 @@ def CmdDCommit(args):
             exit_code=True) == 0:
     RunGit(['branch', '-D', MERGE_BRANCH])
   # Stuff our change into the merge branch.
-  RunGit(['checkout', '-q', '-b', MERGE_BRANCH, 'trunk'])
+  RunGit(['checkout', '-q', '-b', MERGE_BRANCH, settings.GetSVNBranch()])
   RunGit(['merge', '--squash', cl.GetBranchRef()])
   RunGit(['commit', '-m', cl.GetDescription()])
   # dcommit the merge branch.
