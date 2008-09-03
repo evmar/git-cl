@@ -215,8 +215,14 @@ def CmdDCommit(args):
     print 'Cannot dcommit with a dirty tree.'
     return 1
 
-  print 'Description:', repr(cl.GetDescription())
+  description = cl.GetDescription()
 
+  contributor = raw_input("External source of patch (enter for none): ")
+  if contributor:
+    description += "\n\nPatch from %s." % contributor
+  print 'Description:', repr(description)
+
+  raw_input("About to commit; enter to confirm.")
   # We want to squash all this branch's commits into one commit with the
   # proper description.
   # We do this by doing a "merge --squash" into a new commit branch, then
@@ -229,7 +235,7 @@ def CmdDCommit(args):
   # Stuff our change into the merge branch.
   RunGit(['checkout', '-q', '-b', MERGE_BRANCH, settings.GetSVNBranch()])
   RunGit(['merge', '--squash', cl.GetBranchRef()])
-  RunGit(['commit', '-m', cl.GetDescription()])
+  RunGit(['commit', '-m', description])
   # dcommit the merge branch.
   RunGit(['svn', 'dcommit'])
   # And then swap back to the original branch and clean up.
