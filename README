@@ -23,17 +23,20 @@ $ git config rietveld.cc my-code-reviews@wherever.com
 
 == How to use it
 Make a new branch.  Write some code.  Send it for review:
-$ git cl upload trunk...
-The last argument is passed to "git diff".
+$ git cl upload
+By default, it diffs against the git-svn branch.
+An optional last argument is passed to "git diff", allowing reviews
+against other heads.
 You'll be asked some questions, and the review issue number will be
 cached in your .git directory, so subsequent calls to upload will
 be on the same review.
 
 Review looks good?  Commit the code:
 $ git cl dcommit
-This does a git-svn dcommit, with a twist: all changes on the branch
+This does a git-svn dcommit, with a twist: all changes in the diff
 will be squashed into a single commit, and the description of the commit
-is taken directly from the Rietveld description.
+is taken directly from the Rietveld description.  This command also accepts
+an argument, much like upload.
 
 == Extra commands
 Print some status info:
