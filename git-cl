@@ -179,7 +179,9 @@ class Changelist:
                                       GetUserCredentials,
                                       host_override=settings.GetServer(),
                                       save_cookies=True)
-    rpc_server.Send('/' + self.GetIssue() + '/close')
+    # You cannot close an issue with a GET.
+    # We pass an empty string for the data so it is a POST rather than a GET.
+    rpc_server.Send('/' + self.GetIssue() + '/close', '')
 
 
 def CmdConfig(args):
@@ -235,6 +237,11 @@ def CmdIssue(args):
 
 
 def CmdUpload(args):
+  parser = optparse.OptionParser(
+      usage='git cl upload [options] [branch to diff against]')
+  parser.add_option('-m', dest='message', help='message for patch')
+  (options, args) = parser.parse_args(args)
+
   cl = Changelist()
   if not args:
     # Default to diffing against the SVN trunk.
@@ -243,6 +250,8 @@ def CmdUpload(args):
   upload_args = ['--local_base']
   upload_args.extend(['--server', settings.GetServer()])
   upload_args.extend(['--cc', settings.GetCCList()])
+  if options.message:
+    upload_args.extend(['--message', options.message])
   if cl.GetIssue():
     upload_args.extend(['--issue', cl.GetIssue()])
   issue = upload.RealMain(['upload'] + upload_args + args)

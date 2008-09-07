@@ -16,13 +16,13 @@ setup_gitsvn
   echo "some other work done on a branch" >> test
   git add test; git commit -q -m "branch work"
 
-  test_expect_success "git-cl status has no issue" \
-    "$GIT_CL status | grep -q 'No issue'"
-
   test_expect_success "git-cl upload wants a server" \
-    "$GIT_CL upload 2>&1 | grep -q 'set your server'"
+    "$GIT_CL upload 2>&1 | grep -q 'You must configure'"
 
   git config rietveld.server localhost:8080
+
+  test_expect_success "git-cl status has no issue" \
+    "$GIT_CL status | grep -q 'no issue'"
 
   test_expect_success "upload succeeds" \
     "$GIT_CL upload -m test master... | grep -q 'Issue created'"
