@@ -9,6 +9,7 @@ GIT_CL=$PWD/../git-cl
 
 # Set up an SVN repo that has a few commits to trunk.
 setup_initsvn() {
+  echo "Setting up test SVN repo..."
   rm -rf svnrepo
   svnadmin create svnrepo
 
@@ -24,14 +25,9 @@ setup_initsvn() {
   )
 }
 
-# Set up an svn checkout of the repo.
-reset_svn() {
-  rm -rf svn
-  svn co -q $REPO_URL svn
-}
-
 # Set up a git-svn checkout of the repo.
 setup_gitsvn() {
+  echo "Setting up test git-svn repo..."
   rm -rf git-svn
   # There appears to be no way to make git-svn completely shut up, so we
   # redirect its output.
