@@ -242,6 +242,7 @@ def CmdDCommit(args):
   RunGit(['checkout', '-q', cl.GetBranch()])
   RunGit(['branch', '-D', MERGE_BRANCH])
   issuestore.DropBranchIssue(cl.GetBranchRef())
+  print "Closing issue (you may be prompted for your codereview password)..."
   cl.CloseIssue()
 
 
