@@ -15,11 +15,8 @@ Copy (symlink) it into your path somewhere, along with Rietveld
 upload.py.
 
 == Setup
-Tell it which server to upload to:
-$ git config rietveld.server codereview.appspot.com
-
-Optionally tell it a default CC mailing list for new reviews:
-$ git config rietveld.cc my-code-reviews@wherever.com
+$ git cl config
+From your git checkout will cause it to ask you some questions.
 
 == How to use it
 Make a new branch.  Write some code.  Send it for review:

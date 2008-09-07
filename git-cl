@@ -6,6 +6,7 @@ import getpass
 import optparse
 import os
 import re
+import readline
 import subprocess
 import sys
 import textwrap
@@ -13,6 +14,7 @@ import upload
 import urllib2
 
 VERBOSE=False
+DEFAULT_SERVER = 'codereview.appspot.com'
 
 def RunGit(args, error_ok=False, error_message=None, exit_code=False):
   cmd = ['git'] + args
@@ -38,12 +40,15 @@ class Settings:
     self.cc = None
     self.svn_branch = None
 
-  def GetServer(self):
+  def GetServer(self, error_ok=False):
     if not self.server:
-      error_message = ('You must set your server with ' +
-                       '"git config rietveld.server <hostname>[:<port>]".')
-      self.server = self._GetConfig('rietveld.server',
-                                    error_message=error_message)
+      if not error_ok:
+        error_message = ('You must configure your review setup by running ' +
+                         '"git cl config".')
+        self.server = self._GetConfig('rietveld.server',
+                                      error_message=error_message)
+      else:
+        self.server = self._GetConfig('rietveld.server', error_ok=True)
     return self.server
 
   def GetCCList(self):
@@ -122,6 +127,8 @@ def ShortBranchName(branch):
 
 class Changelist:
   def __init__(self):
+    # Poke settings so we get the "configure your server" message if necessary.
+    settings.GetServer()
     self.branch = None
     self.has_issue = False
     self.issue = self.GetIssue()
@@ -173,6 +180,31 @@ class Changelist:
                                       host_override=settings.GetServer(),
                                       save_cookies=True)
     rpc_server.Send('/' + self.GetIssue() + '/close')
+
+
+def CmdConfig(args):
+  server = settings.GetServer(error_ok=True)
+  prompt = 'Rietveld server (host[:port])'
+  prompt += ' [%s]' % (server or DEFAULT_SERVER)
+  newserver = raw_input(prompt + ': ')
+  if not server and not newserver:
+    newserver = DEFAULT_SERVER
+  if newserver and newserver != server:
+    RunGit(['config', 'rietveld.server', newserver])
+
+  cclist = settings.GetCCList()
+  prompt = 'CC list'
+  if cclist:
+    prompt += ' ("x" to clear) [%s]' % cclist
+  newcclist = raw_input(prompt + ': ')
+  if newcclist and newcclist != cclist or newcclist == 'x':
+    if newcclist == 'x':
+      RunGit(['config', '--unset-all', 'rietveld.cc'], error_ok=True)
+    else:
+      RunGit(['config', 'rietveld.cc', newcclist])
+
+  # TODO: configure a default branch to diff against, rather than this
+  # svn-based hackery.
 
 
 def CmdStatus(args):
@@ -311,6 +343,7 @@ def CmdPatch(args):
 
 
 COMMANDS = [
+  ('config',  'edit configuration for this tree',            CmdConfig),
   ('status',  'show status of changelists',                  CmdStatus),
   ('issue',   'show/set current branch\'s issue number',     CmdIssue),
   ('upload',  'upload the current changelist to codereview', CmdUpload),
