@@ -259,13 +259,15 @@ def CmdPatch(args):
   issue = int(match.group(1))
   #origbranch = RunGit(['symbolic-ref', 'HEAD']).strip()
   newbranch = 'issue_%d' % issue
-  RunGit(['checkout', '-b', newbranch, 'trunk'])
+  RunGit(['checkout', '-b', newbranch, settings.GetSVNBranch()])
   try:
     top = RunGit(['rev-parse', '--show-cdup']).strip()
     if top:
       os.chdir(top)
-    subprocess.check_call('curl --silent %s | patch -p0' % url, shell=True)
+    subprocess.check_call('curl --silent %s | patch -p1' % url, shell=True)
     RunGit(['commit', '-a', '-m', 'patched from issue %d' % issue])
+    cl = Changelist()
+    cl.SetIssue(issue)
   except:
     #RunGit(['checkout', '-f', origbranch])
     raise
