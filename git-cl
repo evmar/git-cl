@@ -110,6 +110,16 @@ class IssueStore:
 issuestore = IssueStore()
 
 
+def IssueURL(issue):
+  """Get the URL for a particular issue."""
+  return 'http://%s/%s' % (settings.GetServer(), issue)
+
+
+def ShortBranchName(branch):
+  """Convert a name like 'refs/heads/foo' to just 'foo'."""
+  return branch.replace('refs/heads/', '')
+
+
 class Changelist:
   def __init__(self):
     self.branch = None
@@ -121,7 +131,7 @@ class Changelist:
   def GetBranch(self):
     if not self.branch:
       self.branchref = RunGit(['symbolic-ref', 'HEAD']).strip()
-      self.branch = self.branchref.replace('refs/heads/', '')
+      self.branch = ShortBranchName(self.branchref)
     return self.branch
   def GetBranchRef(self):
     self.GetBranch()
@@ -134,7 +144,7 @@ class Changelist:
     return self.issue
 
   def GetIssueURL(self):
-    return 'http://%s/%s' % (settings.GetServer(), self.GetIssue())
+    return IssueURL(self.GetIssue())
 
   def GetDescription(self, pretty=False):
     if not self.has_description:
@@ -166,11 +176,20 @@ class Changelist:
 
 
 def CmdStatus(args):
+  issuestore.LoadIssues()
+  if issuestore.issues:
+    print 'Branches associated with reviews:'
+    for branch in sorted(issuestore.issues.keys()):
+      print "  %10s: %s" % (ShortBranchName(branch),
+                            IssueURL(issuestore.issues[branch]))
+
   cl = Changelist()
-  print 'Branch:', cl.GetBranch()
+  print
+  print 'Current branch:',
   if not cl.GetIssue():
-    print 'No issue assigned.'
+    print 'no issue assigned.'
     return 0
+  print cl.GetBranch()
   print 'Issue number:', cl.GetIssue(), '(%s)' % cl.GetIssueURL()
   print 'Issue description:'
   print cl.GetDescription(pretty=True)
@@ -292,7 +311,7 @@ def CmdPatch(args):
 
 
 COMMANDS = [
-  ('status',  'show status of current changelist',           CmdStatus),
+  ('status',  'show status of changelists',                  CmdStatus),
   ('issue',   'show/set current branch\'s issue number',     CmdIssue),
   ('upload',  'upload the current changelist to codereview', CmdUpload),
   ('dcommit', 'commit the current changelist via git-svn',   CmdDCommit),
