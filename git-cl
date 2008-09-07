@@ -3,6 +3,7 @@
 # Copyright (C) 2008 Evan Martin <martine@danga.com>
 
 import getpass
+import optparse
 import os
 import re
 import subprocess
@@ -247,36 +248,47 @@ def CmdDCommit(args):
 
 
 def CmdPatch(args):
-  def Usage():
-    print 'usage: patch <url>'
-    return 1
+  parser = optparse.OptionParser(usage='git cl patch [options] <patch url>')
+  parser.add_option('-b', action='store_true', dest='newbranch',
+                    help='create a new branch off trunk for the patch')
+  parser.add_option('-f', action='store_true', dest='force',
+                    help='with -b, clobber any existing branch')
+  (options, args) = parser.parse_args(args)
   if len(args) != 1:
-    return Usage()
+    return parser.print_help()
   url = args[0]
-  match = re.search(r'issue(\d+)', url)
-  if not match:
-    print "couldn't find issue number in url!"
-    return Usage()
-  issue = int(match.group(1))
-  #origbranch = RunGit(['symbolic-ref', 'HEAD']).strip()
-  newbranch = 'issue_%d' % issue
-  RunGit(['checkout', '-b', newbranch, settings.GetSVNBranch()])
-  try:
-    top = RunGit(['rev-parse', '--show-cdup']).strip()
-    if top:
-      os.chdir(top)
-    # Git patches have a/ at the beginning of source paths.  We strip that out
-    # with a sed script rather than the -p flag to patch so we can feed either
-    # Git or svn-style patches into the same patch command.
-    gitsed = "sed -e 's|^--- a/|--- |'"
-    subprocess.check_call('curl --silent %s | %s | patch -p0' % (url, gitsed),
-                          shell=True)
-    RunGit(['commit', '-a', '-m', 'patched from issue %d' % issue])
+
+  issue = None
+  if options.newbranch:
+    # Figure out the issue number and branch name from the URL.
+    match = re.search(r'issue(\d+)', url)
+    if not match:
+      print "couldn't find issue number in url!"
+      return Usage()
+    issue = int(match.group(1))
+    newbranch = 'issue_%d' % issue
+    if options.force:
+      RunGit(['branch', '-D', newbranch], error_ok=True)
+    RunGit(['checkout', '-b', newbranch, settings.GetSVNBranch()])
+
+  # Switch up to the top-level directory, if necessary, in preparation for
+  # applying the patch.
+  top = RunGit(['rev-parse', '--show-cdup']).strip()
+  if top:
+    os.chdir(top)
+
+  # Git patches have a/ at the beginning of source paths.  We strip that out
+  # with a sed script rather than the -p flag to patch so we can feed either
+  # Git or svn-style patches into the same patch command.
+  gitsed = "sed -e 's|^--- a/|--- |'"
+  subprocess.check_call('curl --silent %s | %s | patch -p0' % (url, gitsed),
+                        shell=True)
+
+  # If we had an issue, commit the current state and register the issue.
+  if issue:
+    RunGit(['commit', '-a', '-m', 'patch from issue %d' % issue])
     cl = Changelist()
     cl.SetIssue(issue)
-  except:
-    #RunGit(['checkout', '-f', origbranch])
-    raise
 
 
 COMMANDS = [
