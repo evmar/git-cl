@@ -38,7 +38,7 @@ setup_gitsvn
        $URL/edit
 
   test_expect_success "git-cl dcommits ok" \
-    "$GIT_CL dcommit"
+    "$GIT_CL dcommit -f"
 
   git checkout -q master
   git svn -q rebase >/dev/null 2>&1

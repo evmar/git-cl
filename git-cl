@@ -260,6 +260,12 @@ def CmdUpload(args):
 
 
 def CmdDCommit(args):
+  parser = optparse.OptionParser(
+      usage='git cl dcommit [options] [branch to diff against]')
+  parser.add_option('-f', action='store_true', dest='force',
+                    help="force yes to questions (don't prompt)")
+  (options, args) = parser.parse_args(args)
+
   cl = Changelist()
   # It is important to have these checks at the top.  Not only for user
   # convenience, but also because the cl object then caches the correct values
@@ -278,12 +284,14 @@ def CmdDCommit(args):
 
   description = cl.GetDescription()
 
-  contributor = raw_input("External source of patch (enter for none): ")
-  if contributor:
-    description += "\n\nPatch from %s." % contributor
+  if not options.force:
+    contributor = raw_input("External source of patch (enter for none): ")
+    if contributor:
+      description += "\n\nPatch from %s." % contributor
   print 'Description:', repr(description)
 
-  raw_input("About to commit; enter to confirm.")
+  if not options.force:
+    raw_input("About to commit; enter to confirm.")
   # We want to squash all this branch's commits into one commit with the
   # proper description.
   # We do this by doing a "merge --squash" into a new commit branch, then
