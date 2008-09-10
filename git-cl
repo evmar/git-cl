@@ -247,7 +247,7 @@ def CmdUpload(args):
     # Default to diffing against the SVN trunk.
     args = [settings.GetSVNBranch()]
   subprocess.call(['git', 'diff', '--stat'] + args)
-  upload_args = ['--local_base']
+  upload_args = ['--assume_yes']  # Don't ask about untracked files.
   upload_args.extend(['--server', settings.GetServer()])
   upload_args.extend(['--cc', settings.GetCCList()])
   if options.message:
