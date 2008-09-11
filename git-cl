@@ -315,10 +315,16 @@ def CmdUpload(args):
 
 def CmdDCommit(args):
   parser = optparse.OptionParser(
-      usage='git cl dcommit [options] [branch to diff against]')
+      usage='git cl dcommit [options] [git-svn branch to apply against]')
   parser.add_option('-f', action='store_true', dest='force',
                     help="force yes to questions (don't prompt)")
   (options, args) = parser.parse_args(args)
+
+  if not args:
+    # Default to merging against our best guess of the SVN branch.
+    args = [cl.GetSVNBranch()]
+
+  base_branch = args[0]
 
   cl = Changelist()
   # It is important to have these checks at the top.  Not only for user
@@ -356,7 +362,7 @@ def CmdDCommit(args):
             exit_code=True) == 0:
     RunGit(['branch', '-D', MERGE_BRANCH])
   # Stuff our change into the merge branch.
-  RunGit(['checkout', '-q', '-b', MERGE_BRANCH, settings.GetSVNBranch()])
+  RunGit(['checkout', '-q', '-b', MERGE_BRANCH, base_branch])
   RunGit(['merge', '--squash', cl.GetBranchRef()])
   RunGit(['commit', '-m', description])
   # dcommit the merge branch.
