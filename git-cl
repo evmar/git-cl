@@ -130,6 +130,7 @@ class Changelist:
     # Poke settings so we get the "configure your server" message if necessary.
     settings.GetServer()
     self.branch = None
+    self.upstream_branch = None
     self.has_issue = False
     self.issue = self.GetIssue()
     self.has_description = False
@@ -143,6 +144,18 @@ class Changelist:
   def GetBranchRef(self):
     self.GetBranch()
     return self.branchref
+
+  def GetUpstreamBranch(self):
+    if self.upstream_branch is None:
+      branch = self.GetBranch()
+      error_message = """Unable to determine default branch to diff against.
+Either pass complete "git diff"-style arguments, like
+  git cl upload origin/master
+or verify this branch is set up to track another (via the --track argument to
+"git checkout -b ...")."""
+      self.upstream_branch = RunGit(['config', 'branch.%s.merge' % branch],
+                                    error_message=error_message).strip()
+    return self.upstream_branch
 
   def GetIssue(self):
     if not self.has_issue:
@@ -238,14 +251,14 @@ def CmdIssue(args):
 
 def CmdUpload(args):
   parser = optparse.OptionParser(
-      usage='git cl upload [options] [branch to diff against]')
+      usage='git cl upload [options] [args to "git diff"]')
   parser.add_option('-m', dest='message', help='message for patch')
   (options, args) = parser.parse_args(args)
 
   cl = Changelist()
   if not args:
-    # Default to diffing against the SVN trunk.
-    args = [settings.GetSVNBranch()]
+    # Default to diffing against the "upstream" branch.
+    args = [cl.GetUpstreamBranch()]
   subprocess.call(['git', 'diff', '--stat'] + args)
   upload_args = ['--assume_yes']  # Don't ask about untracked files.
   upload_args.extend(['--server', settings.GetServer()])
