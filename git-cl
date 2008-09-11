@@ -9,6 +9,7 @@ import re
 import readline
 import subprocess
 import sys
+import tempfile
 import textwrap
 import upload
 import urllib2
@@ -249,6 +250,25 @@ def CmdIssue(args):
   print 'Issue number:', cl.GetIssue(), '(%s)' % cl.GetIssueURL()
 
 
+def UserEditedLog(starting_text):
+  """Given some starting text, let the user edit it and return the result."""
+  editor = os.getenv('EDITOR', 'vi')
+
+  file = tempfile.NamedTemporaryFile()
+  filename = file.name
+  file.write(starting_text)
+  file.flush()
+
+  ret = subprocess.call([editor, filename])
+  if ret != 0:
+    return
+
+  text = open(filename).read()
+  file.close()
+  stripcomment_re = re.compile(r'^#.*$', re.MULTILINE)
+  return stripcomment_re.sub('', text).strip()
+
+
 def CmdUpload(args):
   parser = optparse.OptionParser(
       usage='git cl upload [options] [args to "git diff"]')
@@ -267,6 +287,27 @@ def CmdUpload(args):
     upload_args.extend(['--message', options.message])
   if cl.GetIssue():
     upload_args.extend(['--issue', cl.GetIssue()])
+  else:
+    # Construct a description for this change from the log.
+    # We need to convert diff options to log options.
+    log_args = []
+    if len(args) == 1 and not args[0].endswith('.'):
+      log_args = [args[0] + '..']
+    elif len(args) == 2:
+      log_args = [args[0] + '..' + args[1]]
+    else:
+      log_args = args[:]  # Hope for the best!
+    desc = RunGit(['log', '--pretty=format:* %s\n%b'] + log_args)
+    initial_text = """# Enter a description of the change.
+# This will displayed on the codereview site.
+# The first line will be the short subject of the review."""
+    desc = UserEditedLog(initial_text + '\n' + desc)
+    if not desc:
+      print "Description empty; aborting."
+      return 1
+    subject, body = desc.split('\n', 1)
+    upload_args.extend(['--message', subject])
+    upload_args.extend(['--description', body])
   issue = upload.RealMain(['upload'] + upload_args + args)
   if not cl.GetIssue():
     cl.SetIssue(issue)
