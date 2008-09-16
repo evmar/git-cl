@@ -322,7 +322,7 @@ def CmdDCommit(args):
 
   if not args:
     # Default to merging against our best guess of the SVN branch.
-    args = [cl.GetSVNBranch()]
+    args = [settings.GetSVNBranch()]
 
   base_branch = args[0]
 
