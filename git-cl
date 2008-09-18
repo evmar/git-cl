@@ -14,13 +14,12 @@ import textwrap
 import upload
 import urllib2
 
-VERBOSE=False
 DEFAULT_SERVER = 'codereview.appspot.com'
 
 def RunGit(args, error_ok=False, error_message=None, exit_code=False):
   cmd = ['git'] + args
-  if VERBOSE:
-    print >>sys.stderr, ' '.join(cmd)
+  # Useful for debugging:
+  # print >>sys.stderr, ' '.join(cmd)
   proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
   output = proc.communicate()[0]
   if exit_code:
