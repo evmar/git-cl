@@ -171,7 +171,7 @@ or verify this branch is set up to track another (via the --track argument to
     if not self.has_description:
       if self.GetIssue():
         url = self.GetIssueURL() + '/description'
-        self.description = urllib2.urlopen(url).read()
+        self.description = urllib2.urlopen(url).read().strip()
       self.has_description = True
     if pretty:
       wrapper = textwrap.TextWrapper()
