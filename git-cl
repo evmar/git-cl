@@ -58,8 +58,45 @@ class Settings:
 
   def GetSVNBranch(self):
     if self.svn_branch is None:
-      # Fetch config is a refspec, of the form remotename:localname.
-      self.svn_branch = self._GetConfig('svn-remote.svn.fetch').split(':')[1]
+      # Try to figure out which remote branch we're based on.
+
+      # Get the refname and hash for all refs/remotes/*.
+      remotes = RunGit(['for-each-ref', '--format=%(refname) %(objectname)',
+                        'refs/remotes'])
+      remote_refs = {}
+      for ref, hash in [line.split(' ') for line in remotes.splitlines()]:
+        # git-svn remote refs are generally directly in the refs/remotes/dir,
+        # not a subdirectory (like refs/remotes/origin/master).
+        if '/' in ref[len('refs/remotes/'):]:
+          continue
+        remote_refs[hash] = ref
+
+      if len(remote_refs) == 1:
+        # Only one remote branch exists -- seems like a good candidate.
+        self.svn_branch = remote_refs.values()[0]
+      elif len(remote_refs) > 1:
+        # We have more than one remote branch available.  We need to guess
+        # which one we're based off of.  git-svn does this by iterating
+        # backwards through the log and looking for git-svn-id: lines.
+        # We just want to match up to a git branch, so our job is easier.
+        # We don't want to go through all of history, so read a line from the
+        # pipe at a time.
+        cmd = ['git', 'rev-list', 'HEAD']
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        for line in proc.stdout:
+          line = line.strip()
+          if line in remote_refs:
+            self.svn_branch = remote_refs[line]
+            proc.stdout.close()  # Cut pipe.
+            break
+
+      if not self.svn_branch:
+        # This code is still incorrect.  If you branched off from a remote
+        # branch, then ran "git svn fetch" (so it moved forwards), then this
+        # code won't figure out the right thing.  The proper fix is too hard
+        # to implement right now.
+        raise "Can't guess svn branch -- try specifying it on the command line"
+
     return self.svn_branch
 
   def _GetConfig(self, param, **kwargs):
