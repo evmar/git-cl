@@ -25,8 +25,8 @@ By default, it diffs against the git-svn branch.
 An optional last argument is passed to "git diff", allowing reviews
 against other heads.
 You'll be asked some questions, and the review issue number will be
-cached in your .git directory, so subsequent calls to upload will
-be on the same review.
+associated with your current git branch, so subsequent calls to upload
+will update that review rather than making a new one.
 
 Review looks good?  Commit the code:
 $ git cl dcommit
@@ -39,8 +39,11 @@ an argument, much like upload.
 Print some status info:
 $ git cl status
 
-Edit the issue association on a branch:
+Edit the issue association on the current branch:
 $ git cl issue 1234
 
-Patch in a review as a new branch:
+Patch in a review:
 $ git cl patch <url to full patch>
+Try "git cl patch --help" for more options.
+
+vim: tw=72 :
