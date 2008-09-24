@@ -375,7 +375,7 @@ def CmdDCommit(args):
     return 1
 
   if RunGit(['diff-index', 'HEAD']):
-    print 'Cannot dcommit with a dirty tree.'
+    print 'Cannot dcommit with a dirty tree.  You must commit locally first.'
     return 1
 
   description = cl.GetDescription()
