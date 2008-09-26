@@ -336,14 +336,14 @@ def CmdUpload(args):
     desc = RunGit(['log', '--pretty=format:* %s\n%b'] + log_args)
     initial_text = """# Enter a description of the change.
 # This will displayed on the codereview site.
-# The first line will be the short subject of the review."""
+# The first line will also be used as the subject of the review."""
     desc = UserEditedLog(initial_text + '\n' + desc)
     if not desc:
       print "Description empty; aborting."
       return 1
-    subject, body = desc.split('\n', 1)
+    subject = desc.splitlines()[0]
     upload_args.extend(['--message', subject])
-    upload_args.extend(['--description', body])
+    upload_args.extend(['--description', desc])
   issue = upload.RealMain(['upload'] + upload_args + args)
   if not cl.GetIssue():
     cl.SetIssue(issue)
