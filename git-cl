@@ -354,6 +354,9 @@ def CmdDCommit(args):
       usage='git cl dcommit [options] [git-svn branch to apply against]')
   parser.add_option('-f', action='store_true', dest='force',
                     help="force yes to questions (don't prompt)")
+  parser.add_option('-c', dest='contributor',
+                    help="external contributor for patch (appended to " +
+                         "description)")
   (options, args) = parser.parse_args(args)
 
   if not args:
@@ -380,10 +383,8 @@ def CmdDCommit(args):
 
   description = cl.GetDescription()
 
-  if not options.force:
-    contributor = raw_input("External source of patch (enter for none): ")
-    if contributor:
-      description += "\n\nPatch from %s." % contributor
+  if options.contributor:
+    description += "\n\nPatch from %s." % contributor
   print 'Description:', repr(description)
 
   if not options.force:
