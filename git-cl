@@ -445,7 +445,7 @@ def CmdPatch(args):
   # Git patches have a/ at the beginning of source paths.  We strip that out
   # with a sed script rather than the -p flag to patch so we can feed either
   # Git or svn-style patches into the same patch command.
-  gitsed = "sed -e 's|^--- a/|--- |'"
+  gitsed = "sed -e 's|^--- a/|--- |; s|^+++ b/|+++ |'"
   subprocess.check_call('curl --silent %s | %s | patch -p0' % (url, gitsed),
                         shell=True)
 
