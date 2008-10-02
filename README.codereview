@@ -84,8 +84,15 @@ What if you then need to change A?
    you to have separate branches for A, B, and C, and after writing A'
    you merge it into each of those branches.  (topgit automates this
    merging process.)  This is also what is recommended by git-cl, which
-   likes having a different branch identifiers to hang the issue number
-   off of.
+   likes having different branch identifiers to hang the issue number
+   off of.  Your history ends up looking like:
+
+       O---A---B---C
+            \   \   \
+             A'--B'--C'
+
+   Which is ugly, but it accurately tracks the real history of your work, can
+   be thrown away at the end by committing A+A' as a single "squash" commit.
 
 In practice, this comes up pretty rarely.  Suggestions for better workflows
 are welcome.
