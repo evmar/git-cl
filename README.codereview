@@ -27,6 +27,7 @@ with git:
    commit your initial work in a commit A, making your history like
    O--A.  After review comments, you commit --amend, effectively
    erasing A and making a new commit A', so history is now O--A'.
+   (Equivalently, you can use git reset --soft or git rebase -i.)
 
 2) Writing follow-up commits.  Initial work is again in A, and after
    review comments, you write a new commit B so your history looks
