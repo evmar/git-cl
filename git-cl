@@ -383,8 +383,9 @@ def CmdDCommit(args):
 
   description = cl.GetDescription()
 
+  description += "\n\nReview URL: %s" % cl.GetIssueURL()
   if options.contributor:
-    description += "\n\nPatch from %s." % options.contributor
+    description += "\nPatch from %s." % options.contributor
   print 'Description:', repr(description)
 
   if not options.force:
