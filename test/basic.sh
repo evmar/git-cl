@@ -24,6 +24,8 @@ setup_gitsvn
   test_expect_success "git-cl status has no issue" \
     "$GIT_CL status | grep -q 'no issue'"
 
+  # Prevent the editor from coming up when you upload.
+  export EDITOR=/bin/true
   test_expect_success "upload succeeds" \
     "$GIT_CL upload -m test master... | grep -q 'Issue created'"
 

@@ -40,6 +40,7 @@ cleanup() {
 
 # Usage: test_expect_success "description of test" "test code".
 test_expect_success() {
+  echo "TESTING: $1"
   set +e
   eval "$2"
   exit_code=$?
