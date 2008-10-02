@@ -384,7 +384,7 @@ def CmdDCommit(args):
   description = cl.GetDescription()
 
   if options.contributor:
-    description += "\n\nPatch from %s." % contributor
+    description += "\n\nPatch from %s." % options.contributor
   print 'Description:', repr(description)
 
   if not options.force:
