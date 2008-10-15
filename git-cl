@@ -102,54 +102,36 @@ class Settings:
   def _GetConfig(self, param, **kwargs):
     return RunGit(['config', param], **kwargs).strip()
 
+
 settings = Settings()
 
 
-class IssueStore:
-  def __init__(self):
-    self.storepath = None
-    self.issues = None
+did_migrate_check = False
+def CheckForMigration():
+  """Migrate from the old issue format, if found.
 
-  def GetStorePath(self):
-    if not self.storepath:
-      gitdir = RunGit(['rev-parse', '--git-dir']).strip()
-      self.storepath = os.path.join(gitdir, 'cl-mapping')
-    return self.storepath
+  We used to store the branch<->issue mapping in a file in .git, but it's
+  better to store it in the .git/config, since deleting a branch deletes that
+  branch's entry there.
+  """
 
-  def LoadIssues(self):
-    self.issues = {}
-    if not os.path.exists(self.GetStorePath()):
-      return
-    store = open(self.GetStorePath(), 'r')
+  # Don't run more than once.
+  global did_migrate_check
+  if did_migrate_check:
+    return
+
+  gitdir = RunGit(['rev-parse', '--git-dir']).strip()
+  storepath = os.path.join(gitdir, 'cl-mapping')
+  if os.path.exists(storepath):
+    print "old-style git-cl mapping file (%s) found; migrating." % storepath
+    store = open(storepath, 'r')
     for line in store:
-      branch, issue = line.split()
-      self.issues[branch] = issue
+      branch, issue = line.strip().split()
+      RunGit(['config', 'branch.%s.rietveldissue' % ShortBranchName(branch),
+              issue])
     store.close()
-
-  def LookupIssue(self, branch):
-    if not self.issues:
-      self.LoadIssues()
-    if branch in self.issues:
-      return self.issues[branch]
-    return None
-
-  def FlushIssues(self):
-    store = open(self.GetStorePath(), 'w')
-    for branch, issue in self.issues.items():
-      store.write('%s %s\n' % (branch, issue))
-    store.close()
-
-  def SetIssue(self, branch, issue):
-    if not self.issues:
-      self.LoadIssues()
-    self.issues[branch] = issue
-    self.FlushIssues()
-
-  def DropBranchIssue(self, branch):
-    del self.issues[branch]
-    self.FlushIssues()
-
-issuestore = IssueStore()
+    os.remove(storepath)
+  did_migrate_check = True
 
 
 def IssueURL(issue):
@@ -163,23 +145,29 @@ def ShortBranchName(branch):
 
 
 class Changelist:
-  def __init__(self):
+  def __init__(self, branchref=None):
     # Poke settings so we get the "configure your server" message if necessary.
     settings.GetServer()
-    self.branch = None
+    self.branchref = branchref
+    if self.branchref:
+      self.branch = ShortBranchName(self.branchref)
+    else:
+      self.branch = None
     self.upstream_branch = None
     self.has_issue = False
-    self.issue = self.GetIssue()
+    self.issue = None
     self.has_description = False
     self.description = None
 
   def GetBranch(self):
+    """Returns the short branch name, e.g. 'master'."""
     if not self.branch:
       self.branchref = RunGit(['symbolic-ref', 'HEAD']).strip()
       self.branch = ShortBranchName(self.branchref)
     return self.branch
   def GetBranchRef(self):
-    self.GetBranch()
+    """Returns the full branch name, e.g. 'refs/heads/master'."""
+    self.GetBranch()  # Poke the lazy loader.
     return self.branchref
 
   def GetUpstreamBranch(self):
@@ -196,7 +184,12 @@ or verify this branch is set up to track another (via the --track argument to
 
   def GetIssue(self):
     if not self.has_issue:
-      self.issue = issuestore.LookupIssue(self.GetBranchRef())
+      CheckForMigration()
+      issue = RunGit(['config', self._IssueSetting()], error_ok=True).strip()
+      if issue:
+        self.issue = issue
+      else:
+        self.issue = None
       self.has_issue = True
     return self.issue
 
@@ -216,7 +209,11 @@ or verify this branch is set up to track another (via the --track argument to
     return self.description
 
   def SetIssue(self, issue):
-    issuestore.SetIssue(self.GetBranchRef(), issue)
+    """Set this branch's issue.  If issue=0, clears the issue."""
+    if issue:
+      RunGit(['config', self._IssueSetting(), str(issue)])
+    else:
+      RunGit(['config', '--unset', self._IssueSetting()])
     self.has_issue = False
 
   def CloseIssue(self):
@@ -232,6 +229,10 @@ or verify this branch is set up to track another (via the --track argument to
     # You cannot close an issue with a GET.
     # We pass an empty string for the data so it is a POST rather than a GET.
     rpc_server.Send('/' + self.GetIssue() + '/close', '')
+
+  def _IssueSetting(self):
+    """Return the git setting that stores this change's issue."""
+    return 'branch.%s.rietveldissue' % self.GetBranch()
 
 
 def CmdConfig(args):
@@ -260,12 +261,12 @@ def CmdConfig(args):
 
 
 def CmdStatus(args):
-  issuestore.LoadIssues()
-  if issuestore.issues:
+  branches = RunGit(['for-each-ref', '--format=%(refname)', 'refs/heads'])
+  if branches:
     print 'Branches associated with reviews:'
-    for branch in sorted(issuestore.issues.keys()):
-      print "  %10s: %s" % (ShortBranchName(branch),
-                            IssueURL(issuestore.issues[branch]))
+    for branch in sorted(branches.splitlines()):
+      cl = Changelist(branchref=branch)
+      print "  %10s: %s" % (cl.GetBranch(), cl.GetIssue())
 
   cl = Changelist()
   print
@@ -408,9 +409,9 @@ def CmdDCommit(args):
   # And then swap back to the original branch and clean up.
   RunGit(['checkout', '-q', cl.GetBranch()])
   RunGit(['branch', '-D', MERGE_BRANCH])
-  issuestore.DropBranchIssue(cl.GetBranchRef())
   print "Closing issue (you may be prompted for your codereview password)..."
   cl.CloseIssue()
+  cl.SetIssue(0)
 
 
 def CmdPatch(args):

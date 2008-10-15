@@ -47,8 +47,8 @@ setup_gitsvn
   test_expect_success "dcommitted code has proper description" \
     "git show | grep -q 'foo-quux'"
 
-  test_expect_success "issue is no longer in branch mapping" \
-    "diff -q .git/cl-mapping /dev/null"
+  test_expect_success "issue no longer has a branch" \
+    "git cl status | grep -q 'work: None'"
 )
 SUCCESS=$?
 
