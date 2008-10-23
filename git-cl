@@ -39,11 +39,12 @@ class Settings:
     self.server = None
     self.cc = None
     self.svn_branch = None
+    self.tree_status_url = None
 
   def GetServer(self, error_ok=False):
     if not self.server:
       if not error_ok:
-        error_message = ('You must configure your review setup by running ' +
+        error_message = ('You must configure your review setup by running '
                          '"git cl config".')
         self.server = self._GetConfig('rietveld.server',
                                       error_message=error_message)
@@ -98,6 +99,15 @@ class Settings:
         raise "Can't guess svn branch -- try specifying it on the command line"
 
     return self.svn_branch
+
+  def GetTreeStatusUrl(self, error_ok=False):
+    if not self.tree_status_url:
+      error_message = ('You must configure your tree status URL by running '
+                       '"git cl config".')
+      self.tree_status_url = self._GetConfig('rietveld.tree-status-url',
+                                             error_ok=error_ok,
+                                             error_message=error_message)
+    return self.tree_status_url
 
   def _GetConfig(self, param, **kwargs):
     return RunGit(['config', param], **kwargs).strip()
@@ -250,11 +260,20 @@ def CmdConfig(args):
   if cclist:
     prompt += ' ("x" to clear) [%s]' % cclist
   newcclist = raw_input(prompt + ': ')
-  if newcclist and newcclist != cclist or newcclist == 'x':
-    if newcclist == 'x':
-      RunGit(['config', '--unset-all', 'rietveld.cc'], error_ok=True)
-    else:
-      RunGit(['config', 'rietveld.cc', newcclist])
+  if newcclist == 'x':
+    RunGit(['config', '--unset-all', 'rietveld.cc'], error_ok=True)
+  elif newcclist and newcclist != cclist:
+    RunGit(['config', 'rietveld.cc', newcclist])
+
+  tree_url = settings.GetTreeStatusUrl(error_ok=True)
+  prompt = 'Tree status URL'
+  if tree_url:
+    prompt += ' ("x" to clear) [%s]' % tree_url
+  new_tree_url = raw_input(prompt + ': ')
+  if new_tree_url == 'x':
+    RunGit(['config', '--unset-all', 'rietveld.tree-status-url'], error_ok=True)
+  elif new_tree_url and new_tree_url != tree_url:
+    RunGit(['config', 'rietveld.tree-status-url', new_tree_url])
 
   # TODO: configure a default branch to diff against, rather than this
   # svn-based hackery.
@@ -383,8 +402,15 @@ def CmdDCommit(args):
     return 1
 
   if not options.force:
-    # Check the tree status
-    pass
+    # Check the tree status if the tree status URL is set.
+    status = GetTreeStatus()
+    if 'closed' == status:
+      print ('The tree is closed.  Please wait for it to reopen. Use '
+             '"git cl dcommit -f" to commit on a closed tree.')
+      return 1
+    elif 'unknown' == status:
+      print ('Unable to determine tree status.  Please verify manually and '
+             'use "git cl dcommit -f" to commit on a closed tree.')
 
   description = cl.GetDescription()
 
@@ -460,6 +486,27 @@ def CmdPatch(args):
     RunGit(['commit', '-a', '-m', 'patch from issue %d' % issue])
     cl = Changelist()
     cl.SetIssue(issue)
+
+def GetTreeStatus():
+  """Fetches the tree status and returns either 'open', 'closed',
+  'unknown' or 'unset'."""
+  url = settings.GetTreeStatusUrl()
+  if url:
+    status = urllib2.urlopen(url).read().lower()
+    if status.find('closed') != -1:
+      return 'closed'
+    elif status.find('open') != -1:
+      return 'open'
+    return 'unknown'
+
+  return 'unset'
+
+def CmdTreeStatus(args):
+  status = GetTreeStatus()
+  if 'unset' == status:
+    print 'You must configure your tree status URL by running "git cl config".'
+  else:
+    print "The tree is %s" % status
 
 
 COMMANDS = [
