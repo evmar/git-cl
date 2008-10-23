@@ -41,10 +41,8 @@ cleanup() {
 # Usage: test_expect_success "description of test" "test code".
 test_expect_success() {
   echo "TESTING: $1"
-  set +e
-  eval "$2"
-  exit_code=$?
-  set -e
+  exit_code=0
+  sh -c "$2" || exit_code=$?
   if [ $exit_code != 0 ]; then
     echo "FAILURE: $1"
     return $exit_code
