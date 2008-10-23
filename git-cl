@@ -381,6 +381,10 @@ def CmdDCommit(args):
     print 'Cannot dcommit with a dirty tree.  You must commit locally first.'
     return 1
 
+  if not options.force:
+    # Check the tree status
+    pass
+
   description = cl.GetDescription()
 
   description += "\n\nReview URL: %s" % cl.GetIssueURL()
@@ -464,6 +468,7 @@ COMMANDS = [
   ('upload',  'upload the current changelist to codereview', CmdUpload),
   ('dcommit', 'commit the current changelist via git-svn',   CmdDCommit),
   ('patch',   'patch in a code review',                      CmdPatch),
+  ('tree',    'show the status of the tree',                 CmdTreeStatus),
 ]
 
 
