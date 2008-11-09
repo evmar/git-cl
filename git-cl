@@ -16,6 +16,11 @@ import urllib2
 
 DEFAULT_SERVER = 'codereview.appspot.com'
 
+def DieWithError(message):
+  print >>sys.stderr, message
+  sys.exit(1)
+
+
 def RunGit(args, error_ok=False, error_message=None, exit_code=False):
   cmd = ['git'] + args
   # Useful for debugging:
@@ -25,12 +30,8 @@ def RunGit(args, error_ok=False, error_message=None, exit_code=False):
   if exit_code:
     return proc.returncode
   if not error_ok and proc.returncode != 0:
-    print >>sys.stderr, 'Command "%s" failed.' % (' '.join(cmd))
-    if error_message:
-      print >>sys.stderr, error_message
-    else:
-      print >>sys.stderr, output
-    sys.exit(1)
+    DieWithError('Command "%s" failed.\n' % (' '.join(cmd)) +
+                 (error_message or output))
   return output
 
 
@@ -38,6 +39,7 @@ class Settings:
   def __init__(self):
     self.server = None
     self.cc = None
+    self.is_git_svn = None
     self.svn_branch = None
     self.tree_status_url = None
 
@@ -57,8 +59,19 @@ class Settings:
       self.cc = self._GetConfig('rietveld.cc', error_ok=True)
     return self.cc
 
+  def GetIsGitSvn(self):
+    """Return true if this repo looks like it's using git-svn."""
+    if self.is_git_svn is None:
+      # If you have any "svn-remote.*" config keys, we think you're using svn.
+      self.is_git_svn = RunGit(['config', '--get-regexp', r'^svn-remote\.'],
+                               exit_code=True) == 0
+    return self.is_git_svn
+
   def GetSVNBranch(self):
     if self.svn_branch is None:
+      if not self.GetIsGitSvn():
+        raise "Repo doesn't appear to be a git-svn repo."
+
       # Try to figure out which remote branch we're based on.
 
       # Get the refname and hash for all refs/remotes/*.
@@ -183,13 +196,21 @@ class Changelist:
   def GetUpstreamBranch(self):
     if self.upstream_branch is None:
       branch = self.GetBranch()
-      error_message = """Unable to determine default branch to diff against.
+      self.upstream_branch = RunGit(['config', 'branch.%s.merge' % branch],
+                                    error_ok=True).strip()
+
+      if not self.upstream_branch:
+        # Fall back on trying a git-svn upstream branch.
+        if settings.GetIsGitSvn():
+          self.upstream_branch = settings.GetSVNBranch()
+
+      if not self.upstream_branch:
+        DieWithError("""Unable to determine default branch to diff against.
 Either pass complete "git diff"-style arguments, like
   git cl upload origin/master
 or verify this branch is set up to track another (via the --track argument to
-"git checkout -b ...")."""
-      self.upstream_branch = RunGit(['config', 'branch.%s.merge' % branch],
-                                    error_message=error_message).strip()
+"git checkout -b ...").""")
+
     return self.upstream_branch
 
   def GetIssue(self):
