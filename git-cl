@@ -495,16 +495,26 @@ def CmdPatch(args):
   if top:
     os.chdir(top)
 
+  # Construct a pipeline to feed the patch into "git apply".
+  # We use "git apply" to apply the patch instead of "patch" so that we can
+  # pick up file adds.
+  # 1) Fetch the patch.
+  fetch = "curl --silent %s" % url
+  # 2) Munge the patch.
   # Git patches have a/ at the beginning of source paths.  We strip that out
   # with a sed script rather than the -p flag to patch so we can feed either
-  # Git or svn-style patches into the same patch command.
+  # Git or svn-style patches into the same apply command.
   gitsed = "sed -e 's|^--- a/|--- |; s|^+++ b/|+++ |'"
-  subprocess.check_call('curl --silent %s | %s | patch -p0' % (url, gitsed),
-                        shell=True)
+  # 3) Apply the patch.
+  # git apply flags:
+  #   --index means: also insert into the index (so we catch adds).
+  #   --reject means: handle rejections with a .rej file.
+  apply = "git apply --index --reject -p0 -"
+  subprocess.check_call(' | '.join([fetch, gitsed, apply]), shell=True)
 
   # If we had an issue, commit the current state and register the issue.
   if issue:
-    RunGit(['commit', '-a', '-m', 'patch from issue %d' % issue])
+    RunGit(['commit', '-m', 'patch from issue %d' % issue])
     cl = Changelist()
     cl.SetIssue(issue)
 
