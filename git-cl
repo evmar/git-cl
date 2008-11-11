@@ -506,10 +506,8 @@ def CmdPatch(args):
   # Git or svn-style patches into the same apply command.
   gitsed = "sed -e 's|^--- a/|--- |; s|^+++ b/|+++ |'"
   # 3) Apply the patch.
-  # git apply flags:
-  #   --index means: also insert into the index (so we catch adds).
-  #   --reject means: handle rejections with a .rej file.
-  apply = "git apply --index --reject -p0 -"
+  # The --index flag means: also insert into the index (so we catch adds).
+  apply = "git apply --index -p0 -"
   subprocess.check_call(' | '.join([fetch, gitsed, apply]), shell=True)
 
   # If we had an issue, commit the current state and register the issue.
