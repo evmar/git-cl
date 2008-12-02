@@ -364,6 +364,8 @@ def CmdUpload(args):
     upload_args.extend(['--message', options.message])
   if cl.GetIssue():
     upload_args.extend(['--issue', cl.GetIssue()])
+    print ("This branch is associated with issue %s. "
+           "Adding patch to that issue." % cl.GetIssue())
   else:
     # Construct a description for this change from the log.
     # We need to convert diff options to log options.
