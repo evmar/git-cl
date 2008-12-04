@@ -350,6 +350,10 @@ def CmdUpload(args):
   parser = optparse.OptionParser(
       usage='git cl upload [options] [args to "git diff"]')
   parser.add_option('-m', dest='message', help='message for patch')
+  parser.add_option('-r', '--reviewers',
+                    help='reviewer email addresses')
+  parser.add_option('--send-mail', action='store_true',
+                    help='send email to reviewer immediately')
   (options, args) = parser.parse_args(args)
 
   cl = Changelist()
@@ -359,9 +363,15 @@ def CmdUpload(args):
   subprocess.call(['git', 'diff', '--stat'] + args)
   upload_args = ['--assume_yes']  # Don't ask about untracked files.
   upload_args.extend(['--server', settings.GetServer()])
+  if options.reviewers:
+    upload_args.extend(['--reviewers', options.reviewers])
   upload_args.extend(['--cc', settings.GetCCList()])
   if options.message:
     upload_args.extend(['--message', options.message])
+  if options.send_mail:
+    if not options.reviewers:
+      DieWithError("Must specify reviewers to send email.")
+    upload_args.append('--send_mail')
   if cl.GetIssue():
     upload_args.extend(['--issue', cl.GetIssue()])
     print ("This branch is associated with issue %s. "
