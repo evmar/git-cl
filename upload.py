@@ -62,6 +62,38 @@ verbosity = 1
 MAX_UPLOAD_SIZE = 900 * 1024
 
 
+def GetEmail(prompt):
+  """Prompts the user for their email address and returns it.
+
+  The last used email address is saved to a file and offered up as a suggestion
+  to the user. If the user presses enter without typing in anything the last
+  used email address is used. If the user enters a new address, it is saved
+  for next time we prompt.
+
+  """
+  last_email_file_name = os.path.expanduser("~/.last_codereview_email_address")
+  last_email = ""
+  if os.path.exists(last_email_file_name):
+    try:
+      last_email_file = open(last_email_file_name, "r")
+      last_email = last_email_file.readline().strip("\n")
+      last_email_file.close()
+      prompt += " [%s]" % last_email
+    except IOError, e:
+      pass
+  email = raw_input(prompt + ": ").strip()
+  if email:
+    try:
+      last_email_file = open(last_email_file_name, "w")
+      last_email_file.write(email)
+      last_email_file.close()
+    except IOError, e:
+      pass
+  else:
+    email = last_email
+  return email
+
+
 def StatusUpdate(msg):
   """Print a status message to stdout.
 
@@ -436,8 +468,7 @@ def GetRpcServer(options):
     """Prompts the user for a username and password."""
     email = options.email
     if email is None:
-      prompt = "Email (login for uploading to %s): " % options.server
-      email = raw_input(prompt).strip()
+      email = GetEmail("Email (login for uploading to %s)" % options.server)
     password = getpass.getpass("Password for %s: " % email)
     return (email, password)
 
@@ -509,20 +540,20 @@ use_shell = sys.platform.startswith("win")
 
 def RunShellWithReturnCode(command, print_output=False,
                            universal_newlines=True):
-  """Executes a command and returns the output and the return code.
+  """Executes a command and returns the output from stdout and the return code.
 
   Args:
     command: Command to execute.
     print_output: If True, the output is printed to stdout.
+                  If False, both stdout and stderr are ignored.
     universal_newlines: Use universal_newlines flag (default: True).
 
   Returns:
     Tuple (output, return code)
   """
   logging.info("Running %s", command)
-  p = subprocess.Popen(command, stdout=subprocess.PIPE,
-                       stderr=subprocess.STDOUT, shell=use_shell,
-                       universal_newlines=universal_newlines)
+  p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                       shell=use_shell, universal_newlines=universal_newlines)
   if print_output:
     output_array = []
     while True:
@@ -535,7 +566,11 @@ def RunShellWithReturnCode(command, print_output=False,
   else:
     output = p.stdout.read()
   p.wait()
+  errout = p.stderr.read()
+  if print_output and errout:
+    print >>sys.stderr, errout
   p.stdout.close()
+  p.stderr.close()
   return output, p.returncode
 
 
@@ -756,8 +791,6 @@ class SubversionVCS(VersionControlSystem):
     cmd = ["svn", "diff"]
     if self.options.revision:
       cmd += ["-r", self.options.revision]
-    if not sys.platform.startswith("win"):
-      cmd.append("--diff-cmd=diff")
     cmd.extend(args)
     data = RunShell(cmd)
     count = 0
@@ -910,7 +943,7 @@ class SubversionVCS(VersionControlSystem):
             else:
               url = "%s/%s@%s" % (self.svn_base, filename, self.rev_end)
               new_content = RunShell(["svn", "cat", url],
-                                     universal_newlines=True)
+                                     universal_newlines=True, silent_ok=True)
         else:
           base_content = ""
       else:
@@ -926,10 +959,12 @@ class SubversionVCS(VersionControlSystem):
           # the full URL with "@REV" appended instead of using "-r" option.
           url = "%s/%s@%s" % (self.svn_base, filename, self.rev_start)
           base_content = RunShell(["svn", "cat", url],
-                                  universal_newlines=universal_newlines)
+                                  universal_newlines=universal_newlines,
+                                  silent_ok=True)
         else:
           base_content = RunShell(["svn", "cat", filename],
-                                  universal_newlines=universal_newlines)
+                                  universal_newlines=universal_newlines,
+                                  silent_ok=True)
         if not is_binary:
           args = []
           if self.rev_start:
@@ -1321,7 +1356,7 @@ def RealMain(argv, data=None):
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options, files)
     if options.send_mail:
       rpc_server.Send("/" + issue + "/mail", payload="")
-  return issue
+  return issue, patchset
 
 
 def main():
