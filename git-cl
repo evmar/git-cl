@@ -454,6 +454,7 @@ def CmdDCommit(args):
 
   branches = [base_branch, cl.GetBranchRef()]
   if not options.force:
+    subprocess.call(['git', 'diff', '--stat'] + branches)
     raw_input("About to commit; enter to confirm.")
 
   RunGit(['svn', 'commit-diff', '-m', description, '-rHEAD'] + branches)
