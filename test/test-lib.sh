@@ -4,7 +4,7 @@
 set -e
 
 PWD=`pwd`
-REPO_URL=file:///$PWD/svnrepo
+REPO_URL=file://$PWD/svnrepo
 GIT_CL=$PWD/../git-cl
 
 # Set up an SVN repo that has a few commits to trunk.

@@ -45,10 +45,13 @@ setup_gitsvn
   git checkout -q master
   git svn -q rebase >/dev/null 2>&1
   test_expect_success "dcommitted code has proper description" \
-    "git show | grep -q 'foo-quux'"
+      "git show | grep -q 'foo-quux'"
 
   test_expect_success "issue no longer has a branch" \
-    "git cl status | grep -q 'work: None'"
+      "git cl status | grep -q 'work: None'"
+
+  test_expect_success "upstream svn has our commit" \
+      "svn log $REPO_URL 2>/dev/null | grep -q 'foo-quux'"
 )
 SUCCESS=$?
 
