@@ -434,6 +434,16 @@ def CmdDCommit(args):
     print 'Cannot dcommit with a dirty tree.  You must commit locally first.'
     return 1
 
+  # This rev-list syntax means "show all commits not in my branch that
+  # are in base_branch".
+  upstream_commits = RunGit(['rev-list', '^' + cl.GetBranchRef(),
+                             base_branch]).splitlines()
+  if upstream_commits:
+    print ('Base branch "%s" has %d commits '
+           'not in this branch.' % (base_branch, len(upstream_commits)))
+    print 'Run "git merge %s" before attempting to dcommit.' % base_branch
+    return 1
+
   if not options.force:
     # Check the tree status if the tree status URL is set.
     status = GetTreeStatus()
