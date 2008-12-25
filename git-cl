@@ -73,42 +73,46 @@ class Settings:
         raise "Repo doesn't appear to be a git-svn repo."
 
       # Try to figure out which remote branch we're based on.
+      # Strategy:
+      # 1) find all git-svn branches and note their svn URLs.
+      # 2) iterate through our branch history and match up the URLs.
 
-      # Get the refname and hash for all refs/remotes/*.
-      remotes = RunGit(['for-each-ref', '--format=%(refname) %(objectname)',
-                        'refs/remotes'])
-      remote_refs = {}
-      for ref, hash in [line.split(' ') for line in remotes.splitlines()]:
+      # regexp matching the git-svn line that contains the URL.
+      git_svn_re = re.compile(r'^\s*git-svn-id: (\S+)@', re.MULTILINE)
+
+      # Get the refname and svn url for all refs/remotes/*.
+      remotes = RunGit(['for-each-ref', '--format=%(refname)',
+                        'refs/remotes']).splitlines()
+      svn_refs = {}
+      for ref in remotes:
         # git-svn remote refs are generally directly in the refs/remotes/dir,
         # not a subdirectory (like refs/remotes/origin/master).
         if '/' in ref[len('refs/remotes/'):]:
           continue
-        remote_refs[hash] = ref
+        match = git_svn_re.search(RunGit(['cat-file', '-p', ref]))
+        if match:
+          svn_refs[match.group(1)] = ref
 
-      if len(remote_refs) == 1:
-        # Only one remote branch exists -- seems like a good candidate.
-        self.svn_branch = remote_refs.values()[0]
-      elif len(remote_refs) > 1:
-        # We have more than one remote branch available.  We need to guess
-        # which one we're based off of.  git-svn does this by iterating
-        # backwards through the log and looking for git-svn-id: lines.
-        # We just want to match up to a git branch, so our job is easier.
-        # We don't want to go through all of history, so read a line from the
+      if len(svn_refs) == 1:
+        # Only one svn branch exists -- seems like a good candidate.
+        self.svn_branch = svn_refs.values()[0]
+      elif len(svn_refs) > 1:
+        # We have more than one remote branch available.  We don't
+        # want to go through all of history, so read a line from the
         # pipe at a time.
-        cmd = ['git', 'rev-list', 'HEAD']
+        # The -100 is an arbitrary limit so we don't search forever.
+        cmd = ['git', 'log', '-100']
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
         for line in proc.stdout:
-          line = line.strip()
-          if line in remote_refs:
-            self.svn_branch = remote_refs[line]
-            proc.stdout.close()  # Cut pipe.
-            break
+          match = git_svn_re.match(line)
+          if match:
+            url = match.group(1)
+            if url in svn_refs:
+              self.svn_branch = svn_refs[url]
+              proc.stdout.close()  # Cut pipe.
+              break
 
       if not self.svn_branch:
-        # This code is still incorrect.  If you branched off from a remote
-        # branch, then ran "git svn fetch" (so it moved forwards), then this
-        # code won't figure out the right thing.  The proper fix is too hard
-        # to implement right now.
         raise "Can't guess svn branch -- try specifying it on the command line"
 
     return self.svn_branch
