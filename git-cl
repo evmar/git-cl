@@ -471,8 +471,24 @@ def CmdDCommit(args):
     subprocess.call(['git', 'diff', '--stat'] + branches)
     raw_input("About to commit; enter to confirm.")
 
-  RunGit(['svn', 'commit-diff', '-m', description, '-rHEAD'] + branches)
-
+  # We want to squash all this branch's commits into one commit with the
+  # proper description.
+  # We do this by doing a "merge --squash" into a new commit branch, then
+  # dcommitting that.
+  MERGE_BRANCH = 'git-cl-commit'
+  # Delete the merge branch if it already exists.
+  if RunGit(['show-ref', '--quiet', '--verify', 'refs/heads/' + MERGE_BRANCH],
+            exit_code=True) == 0:
+    RunGit(['branch', '-D', MERGE_BRANCH])
+  # Stuff our change into the merge branch.
+  RunGit(['checkout', '-q', '-b', MERGE_BRANCH, base_branch])
+  RunGit(['merge', '--squash', cl.GetBranchRef()])
+  RunGit(['commit', '-m', description])
+  # dcommit the merge branch.
+  RunGit(['svn', 'dcommit'])
+  # And then swap back to the original branch and clean up.
+  RunGit(['checkout', '-q', cl.GetBranch()])
+  RunGit(['branch', '-D', MERGE_BRANCH])
   print "Closing issue (you may be prompted for your codereview password)..."
   cl.CloseIssue()
   cl.SetIssue(0)
