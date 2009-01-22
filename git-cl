@@ -593,6 +593,8 @@ def CmdTreeStatus(args):
   else:
     print "The tree is %s" % status
 
+def CmdSVNBranch(args):
+  print settings.GetSVNBranch()
 
 COMMANDS = [
   ('config',  'edit configuration for this tree',            CmdConfig),
@@ -602,6 +604,7 @@ COMMANDS = [
   ('dcommit', 'commit the current changelist via git-svn',   CmdDCommit),
   ('patch',   'patch in a code review',                      CmdPatch),
   ('tree',    'show the status of the tree',                 CmdTreeStatus),
+  ('svnbranch', 'print the name of the svn branch, if any',  CmdSVNBranch),
 ]
 
 
