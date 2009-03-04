@@ -200,8 +200,14 @@ class Changelist:
   def GetUpstreamBranch(self):
     if self.upstream_branch is None:
       branch = self.GetBranch()
-      self.upstream_branch = RunGit(['config', 'branch.%s.merge' % branch],
-                                    error_ok=True).strip()
+      upstream_branch = RunGit(['config', 'branch.%s.merge' % branch],
+                               error_ok=True).strip()
+      if upstream_branch:
+        remote = RunGit(['config', 'branch.%s.remote' % branch]).strip()
+        # We have remote=origin and branch=refs/heads/foobar; convert to
+        # refs/remotes/origin/foobar.
+        self.upstream_branch = upstream_branch.replace('heads',
+                                                       'remotes/' + remote)
 
       if not self.upstream_branch:
         # Fall back on trying a git-svn upstream branch.
