@@ -428,13 +428,14 @@ def CmdDCommit(args):
                          "description)")
   (options, args) = parser.parse_args(args)
 
+  cl = Changelist()
+
   if not args:
-    # Default to merging against our best guess of the SVN branch.
-    args = [settings.GetUpstreamBranch()]
+    # Default to merging against our best guess of the upstream branch.
+    args = [cl.GetUpstreamBranch()]
 
   base_branch = args[0]
 
-  cl = Changelist()
   # It is important to have these checks at the top.  Not only for user
   # convenience, but also because the cl object then caches the correct values
   # of these fields even as we're juggling branches for setting up the commit.
