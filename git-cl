@@ -42,6 +42,7 @@ class Settings:
     self.is_git_svn = None
     self.svn_branch = None
     self.tree_status_url = None
+    self.viewvc_url = None
 
   def GetServer(self, error_ok=False):
     if not self.server:
@@ -125,6 +126,11 @@ class Settings:
                                              error_ok=error_ok,
                                              error_message=error_message)
     return self.tree_status_url
+
+  def GetViewVCUrl(self):
+    if not self.viewvc_url:
+      self.viewvc_url = self._GetConfig('rietveld.viewvc-url', error_ok=True)
+    return self.viewvc_url
 
   def _GetConfig(self, param, **kwargs):
     return RunGit(['config', param], **kwargs).strip()
@@ -269,7 +275,9 @@ or verify this branch is set up to track another (via the --track argument to
                                       save_cookies=True)
     # You cannot close an issue with a GET.
     # We pass an empty string for the data so it is a POST rather than a GET.
-    rpc_server.Send('/' + self.GetIssue() + '/close', '')
+    data = [("description", self.description),]
+    ctype, body = upload.EncodeMultipartFormData(data, [])
+    rpc_server.Send('/' + self.GetIssue() + '/close', body, ctype)
 
   def _IssueSetting(self):
     """Return the git setting that stores this change's issue."""
@@ -286,25 +294,20 @@ def CmdConfig(args):
   if newserver and newserver != server:
     RunGit(['config', 'rietveld.server', newserver])
 
-  cclist = settings.GetCCList()
-  prompt = 'CC list'
-  if cclist:
-    prompt += ' ("x" to clear) [%s]' % cclist
-  newcclist = raw_input(prompt + ': ')
-  if newcclist == 'x':
-    RunGit(['config', '--unset-all', 'rietveld.cc'], error_ok=True)
-  elif newcclist and newcclist != cclist:
-    RunGit(['config', 'rietveld.cc', newcclist])
+  def SetProperty(initial, caption, name):
+    prompt = caption
+    if initial:
+      prompt += ' ("x" to clear) [%s]' % initial
+    new_val = raw_input(prompt + ': ')
+    if new_val == 'x':
+      RunGit(['config', '--unset-all', 'rietveld.' + name], error_ok=True)
+    elif new_val and new_val != initial:
+      RunGit(['config', 'rietveld.' + name, new_val])
 
-  tree_url = settings.GetTreeStatusUrl(error_ok=True)
-  prompt = 'Tree status URL'
-  if tree_url:
-    prompt += ' ("x" to clear) [%s]' % tree_url
-  new_tree_url = raw_input(prompt + ': ')
-  if new_tree_url == 'x':
-    RunGit(['config', '--unset-all', 'rietveld.tree-status-url'], error_ok=True)
-  elif new_tree_url and new_tree_url != tree_url:
-    RunGit(['config', 'rietveld.tree-status-url', new_tree_url])
+  SetProperty(settings.GetCCList(), 'CC list', 'cc')
+  SetProperty(settings.GetTreeStatusUrl(error_ok=True), 'Tree status URL',
+              'tree-status-url')
+  SetProperty(settings.GetViewVCUrl(), 'ViewVC URL', 'viewvc-url')
 
   # TODO: configure a default branch to diff against, rather than this
   # svn-based hackery.
@@ -498,13 +501,21 @@ def CmdDCommit(args):
   RunGit(['merge', '--squash', cl.GetBranchRef()])
   RunGit(['commit', '-m', description])
   # dcommit the merge branch.
-  RunGit(['svn', 'dcommit'])
+  output = RunGit(['svn', 'dcommit'])
   # And then swap back to the original branch and clean up.
   RunGit(['checkout', '-q', cl.GetBranch()])
   RunGit(['branch', '-D', MERGE_BRANCH])
-  print "Closing issue (you may be prompted for your codereview password)..."
-  cl.CloseIssue()
-  cl.SetIssue(0)
+  if output.find("Committed r") != -1:
+    print "Closing issue (you may be prompted for your codereview password)..."
+    if cl.has_issue:
+      viewvc_url = settings.GetViewVCUrl()
+      if viewvc_url:
+        revision = re.compile(".*?\nCommitted r(\d+)",
+                              re.DOTALL).match(output).group(1)
+        cl.description = (cl.description +
+                          "\n\nCommitted: " + viewvc_url + revision)
+      cl.CloseIssue()
+      cl.SetIssue(0)
 
 
 def CmdPatch(args):
