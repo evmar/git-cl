@@ -349,7 +349,7 @@ def UserEditedLog(starting_text):
   file.write(starting_text)
   file.flush()
 
-  ret = subprocess.call([editor, filename])
+  ret = subprocess.call(editor + ' ' + filename, shell=True)
   if ret != 0:
     return
 
