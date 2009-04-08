@@ -1041,7 +1041,7 @@ class GitVCS(VersionControlSystem):
       base_content = ""
     else:
       status = "M"
-      base_content = RunShell(["git", "show", hash])
+      base_content = RunShell(["git", "show", hash], silent_ok=True)
     return (base_content, new_content, is_binary, status)
 
 
