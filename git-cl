@@ -255,12 +255,32 @@ or verify this branch is set up to track another (via the --track argument to
       return wrapper.fill(self.description)
     return self.description
 
+  def GetPatchset(self):
+    if not self.has_patchset:
+      patchset = RunGit(['config', self._PatchsetSetting()],
+                        error_ok=True).strip()
+      if patchset:
+        self.patchset = patchset
+      else:
+        self.patchset = None
+      self.has_patchset = True
+    return self.patchset
+
+  def SetPatchset(self, patchset):
+    """Set this branch's patchset.  If patchset=0, clears the patchset."""
+    if patchset:
+      RunGit(['config', self._PatchsetSetting(), str(patchset)])
+    else:
+      RunGit(['config', '--unset', self._PatchsetSetting()])
+    self.has_patchset = False
+
   def SetIssue(self, issue):
     """Set this branch's issue.  If issue=0, clears the issue."""
     if issue:
       RunGit(['config', self._IssueSetting(), str(issue)])
     else:
       RunGit(['config', '--unset', self._IssueSetting()])
+      self.SetPatchset(0)
     self.has_issue = False
 
   def CloseIssue(self):
@@ -282,6 +302,10 @@ or verify this branch is set up to track another (via the --track argument to
   def _IssueSetting(self):
     """Return the git setting that stores this change's issue."""
     return 'branch.%s.rietveldissue' % self.GetBranch()
+
+  def _PatchsetSetting(self):
+    """Return the git setting that stores this change's most recent patchset."""
+    return 'branch.%s.rietveldpatchset' % self.GetBranch()
 
 
 def CmdConfig(args):
@@ -419,6 +443,7 @@ def CmdUpload(args):
   issue, patchset = upload.RealMain(['upload'] + upload_args + args)
   if not cl.GetIssue():
     cl.SetIssue(issue)
+  cl.SetPatchset(patchset)
 
 
 def CmdDCommit(args):
