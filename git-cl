@@ -86,10 +86,6 @@ class Settings:
                         'refs/remotes']).splitlines()
       svn_refs = {}
       for ref in remotes:
-        # git-svn remote refs are generally directly in the refs/remotes/dir,
-        # not a subdirectory (like refs/remotes/origin/master).
-        if '/' in ref[len('refs/remotes/'):]:
-          continue
         match = git_svn_re.search(RunGit(['cat-file', '-p', ref]))
         if match:
           svn_refs[match.group(1)] = ref
