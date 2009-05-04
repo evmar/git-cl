@@ -21,11 +21,16 @@ def DieWithError(message):
   sys.exit(1)
 
 
-def RunGit(args, error_ok=False, error_message=None, exit_code=False):
+def RunGit(args, error_ok=False, error_message=None, exit_code=False,
+           redirect_stdout=True):
   cmd = ['git'] + args
   # Useful for debugging:
   # print >>sys.stderr, ' '.join(cmd)
-  proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+  if redirect_stdout:
+    stdout = subprocess.PIPE
+  else:
+    stdout = None
+  proc = subprocess.Popen(cmd, stdout=stdout)
   output = proc.communicate()[0]
   if exit_code:
     return proc.returncode
@@ -622,7 +627,7 @@ def CmdPatch(args):
 def CmdRebase(args):
   # Provide a wrapper for git svn rebase to help avoid accidental
   # git svn dcommit.
-  RunGit(['svn', 'rebase'])
+  RunGit(['svn', 'rebase'], redirect_stdout=False)
 
 def GetTreeStatus():
   """Fetches the tree status and returns either 'open', 'closed',
