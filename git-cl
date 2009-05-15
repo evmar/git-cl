@@ -14,6 +14,11 @@ import textwrap
 import upload
 import urllib2
 
+try:
+  import readline
+except ImportError:
+  pass
+
 DEFAULT_SERVER = 'codereview.appspot.com'
 
 def DieWithError(message):
@@ -378,7 +383,9 @@ def UserEditedLog(starting_text):
   if ret != 0:
     return
 
-  text = open(filename).read()
+  file.flush()
+  file.seek(0)
+  text = file.read()
   file.close()
   stripcomment_re = re.compile(r'^#.*$', re.MULTILINE)
   return stripcomment_re.sub('', text).strip()
