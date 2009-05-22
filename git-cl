@@ -557,14 +557,18 @@ def CmdDCommit(args):
     os.chdir(rel_base_path)
 
   # Stuff our change into the merge branch.
-  RunGit(['checkout', '-q', '-b', MERGE_BRANCH, base_branch])
-  RunGit(['merge', '--squash', cl.GetBranchRef()])
-  RunGit(['commit', '-m', description])
-  # dcommit the merge branch.
-  output = RunGit(['svn', 'dcommit'])
-  # And then swap back to the original branch and clean up.
-  RunGit(['checkout', '-q', cl.GetBranch()])
-  RunGit(['branch', '-D', MERGE_BRANCH])
+  # We wrap in a try...finally block so if anything goes wrong,
+  # we clean up the branches.
+  try:
+    RunGit(['checkout', '-q', '-b', MERGE_BRANCH, base_branch])
+    RunGit(['merge', '--squash', cl.GetBranchRef()])
+    RunGit(['commit', '-m', description])
+    # dcommit the merge branch.
+    output = RunGit(['svn', 'dcommit'])
+  finally:
+    # And then swap back to the original branch and clean up.
+    RunGit(['checkout', '-q', cl.GetBranch()])
+    RunGit(['branch', '-D', MERGE_BRANCH])
 
   if cl.has_issue and output.find("Committed r") != -1:
     print "Closing issue (you may be prompted for your codereview password)..."
