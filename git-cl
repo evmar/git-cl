@@ -457,11 +457,16 @@ def CmdUpload(args):
 def CmdDCommit(args):
   parser = optparse.OptionParser(
       usage='git cl dcommit [options] [git-svn branch to apply against]')
+  parser.add_option('-m', dest='message',
+                    help="override review description")
   parser.add_option('-f', action='store_true', dest='force',
                     help="force yes to questions (don't prompt)")
   parser.add_option('-c', dest='contributor',
                     help="external contributor for patch (appended to " +
                          "description)")
+  parser.add_option('--tbr', action='store_true', dest='tbr',
+                    help="short for 'to be reviewed', commit branch " +
+                         "even without uploading for review")
   (options, args) = parser.parse_args(args)
 
   cl = Changelist()
@@ -471,17 +476,6 @@ def CmdDCommit(args):
     args = [cl.GetUpstreamBranch()]
 
   base_branch = args[0]
-
-  # It is important to have these checks at the top.  Not only for user
-  # convenience, but also because the cl object then caches the correct values
-  # of these fields even as we're juggling branches for setting up the commit.
-  if not cl.GetIssue():
-    print 'Current issue unknown -- has this branch been uploaded?'
-    return 1
-  if not cl.GetDescription():
-    print 'No description set.'
-    print 'Visit %s/edit to set it.' % (cl.GetIssueURL())
-    return 1
 
   if RunGit(['diff-index', 'HEAD']):
     print 'Cannot dcommit with a dirty tree.  You must commit locally first.'
@@ -508,9 +502,34 @@ def CmdDCommit(args):
       print ('Unable to determine tree status.  Please verify manually and '
              'use "git cl dcommit -f" to commit on a closed tree.')
 
-  description = cl.GetDescription()
+  description = options.message
+  if not options.tbr:
+    # It is important to have these checks early.  Not only for user
+    # convenience, but also because the cl object then caches the correct values
+    # of these fields even as we're juggling branches for setting up the commit.
+    if not cl.GetIssue():
+      print 'Current issue unknown -- has this branch been uploaded?'
+      print 'Use --tbr to commit without review.'
+      return 1
 
-  description += "\n\nReview URL: %s" % cl.GetIssueURL()
+    if not description:
+      description = cl.GetDescription()
+
+    if not description:
+      print 'No description set.'
+      print 'Visit %s/edit to set it.' % (cl.GetIssueURL())
+      return 1
+
+    description += "\n\nReview URL: %s" % cl.GetIssueURL()
+  else:
+    # Submitting TBR.  Get a description now.
+    if not description:
+      description = UserEditedLog('TBR: ')
+
+    if not description:
+      print "Description empty; aborting."
+      return 1
+
   if options.contributor:
     description += "\nPatch from %s." % options.contributor
   print 'Description:', repr(description)
@@ -546,17 +565,17 @@ def CmdDCommit(args):
   # And then swap back to the original branch and clean up.
   RunGit(['checkout', '-q', cl.GetBranch()])
   RunGit(['branch', '-D', MERGE_BRANCH])
-  if output.find("Committed r") != -1:
+
+  if cl.has_issue and output.find("Committed r") != -1:
     print "Closing issue (you may be prompted for your codereview password)..."
-    if cl.has_issue:
-      viewvc_url = settings.GetViewVCUrl()
-      if viewvc_url:
-        revision = re.compile(".*?\nCommitted r(\d+)",
-                              re.DOTALL).match(output).group(1)
-        cl.description = (cl.description +
-                          "\n\nCommitted: " + viewvc_url + revision)
-      cl.CloseIssue()
-      cl.SetIssue(0)
+    viewvc_url = settings.GetViewVCUrl()
+    if viewvc_url:
+      revision = re.compile(".*?\nCommitted r(\d+)",
+                            re.DOTALL).match(output).group(1)
+      cl.description = (cl.description +
+                        "\n\nCommitted: " + viewvc_url + revision)
+    cl.CloseIssue()
+    cl.SetIssue(0)
 
 
 def CmdPatch(args):
