@@ -701,9 +701,9 @@ def GetTreeStatus():
   url = settings.GetTreeStatusUrl(error_ok=True)
   if url:
     status = urllib2.urlopen(url).read().lower()
-    if status.find('closed') != -1:
+    if status.find('closed') != -1 or status == '0':
       return 'closed'
-    elif status.find('open') != -1:
+    elif status.find('open') != -1 or status == '1':
       return 'open'
     return 'unknown'
 
