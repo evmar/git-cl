@@ -314,7 +314,8 @@ or verify this branch is set up to track another (via the --track argument to
     return 'branch.%s.rietveldpatchset' % self.GetBranch()
 
 
-def CmdConfig(args):
+def GetCodereviewSettingsInteractively():
+  """Prompt the user for settings."""
   server = settings.GetServer(error_ok=True)
   prompt = 'Rietveld server (host[:port])'
   prompt += ' [%s]' % (server or DEFAULT_SERVER)
@@ -341,6 +342,41 @@ def CmdConfig(args):
 
   # TODO: configure a default branch to diff against, rather than this
   # svn-based hackery.
+
+
+def LoadCodereviewSettingsFromFile(file):
+  """Parse a codereview.settings file."""
+  settings = {}
+  for line in file.read().splitlines():
+    if not line or line.startswith("#"):
+      continue
+    k, v = line.split(": ", 1)
+    settings[k] = v
+
+  def SetProperty(name, setting):
+    fullname = 'rietveld.' + name
+    if setting in settings:
+      RunGit(['config', fullname, settings[setting]])
+    else:
+      RunGit(['config', '--unset-all', fullname])
+
+  SetProperty('server', 'CODE_REVIEW_SERVER')
+  SetProperty('cc', 'CC_LIST')
+  SetProperty('tree-status-url', 'STATUS')
+  SetProperty('viewvc-url', 'VIEW_VC')
+
+
+def CmdConfig(args):
+  parser = optparse.OptionParser(
+      usage='git cl config [repo root containing codereview.settings]')
+  (options, args) = parser.parse_args(args)
+  if len(args) > 0:
+    url = args[0]
+    if not url.endswith('codereview.settings'):
+      url = os.path.join(url, 'codereview.settings')
+    LoadCodereviewSettingsFromFile(urllib2.urlopen(url))
+  else:
+    GetCodereviewSettingsInteractively()
 
 
 def CmdStatus(args):
