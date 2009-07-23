@@ -713,8 +713,12 @@ def CmdTreeStatus(args):
   status = GetTreeStatus()
   if 'unset' == status:
     print 'You must configure your tree status URL by running "git cl config".'
-  else:
-    print "The tree is %s" % status
+    return 2
+
+  print "The tree is %s" % status
+  if status != 'open':
+    return 1
+  return 0
 
 def CmdUpstream(args):
   cl = Changelist()
