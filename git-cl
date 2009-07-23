@@ -446,7 +446,8 @@ def CmdUpload(args):
   # git config key "diff.external" is used).
   env = os.environ.copy()
   if 'GIT_EXTERNAL_DIFF' in env: del env['GIT_EXTERNAL_DIFF']
-  subprocess.call(['git', 'diff', '--no-ext-diff', '--stat', ] + args, env=env)
+  subprocess.call(['git', 'diff', '--no-ext-diff', '--stat', '-M'] + args,
+                  env=env)
 
   upload_args = ['--assume_yes']  # Don't ask about untracked files.
   upload_args.extend(['--server', settings.GetServer()])

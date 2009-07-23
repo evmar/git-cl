@@ -996,13 +996,19 @@ class GitVCS(VersionControlSystem):
     super(GitVCS, self).__init__(options)
     # Map of filename -> hash of base file.
     self.base_hashes = {}
+    # Map of new filename -> old filename for renames.
+    self.renames = {}
 
   def GenerateDiff(self, extra_args):
     # This is more complicated than svn's GenerateDiff because we must convert
     # the diff output to include an svn-style "Index:" line as well as record
     # the hashes of the base files, so we can upload them along with our diff.
+
+    extra_args = extra_args[:]
     if self.options.revision:
       extra_args = [self.options.revision] + extra_args
+    extra_args.append('-M')
+
     # --no-ext-diff is broken in some versions of Git, so try to work around
     # this by overriding the environment (but there is still a problem if the
     # git config key "diff.external" is used).
@@ -1014,11 +1020,14 @@ class GitVCS(VersionControlSystem):
     filecount = 0
     filename = None
     for line in gitdiff.splitlines():
-      match = re.match(r"diff --git a/(.*) b/.*$", line)
+      match = re.match(r"diff --git a/(.*) b/(.*)$", line)
       if match:
         filecount += 1
-        filename = match.group(1)
+        # Intentionally use the "after" filename so we can show renames.
+        filename = match.group(2)
         svndiff.append("Index: %s\n" % filename)
+        if match.group(1) != match.group(2):
+          self.renames[match.group(2)] = match.group(1)
       else:
         # The "index" line in a git diff looks like this (long hashes elided):
         #   index 82c0d44..b2cee3f 100755
@@ -1037,18 +1046,26 @@ class GitVCS(VersionControlSystem):
     return status.splitlines()
 
   def GetBaseFile(self, filename):
-    hash = self.base_hashes[filename]
     base_content = None
     new_content = None
     is_binary = False
-    if hash == "0" * 40:  # All-zero hash indicates no base file.
-      status = "A"
-      base_content = ""
+    status = None
+
+    if filename not in self.base_hashes and filename in self.renames:
+      # If a rename doesn't change the content, we never get a hash.
+      base_content = RunShell(["git", "show", filename])
     else:
-      status = "M"
-      base_content, returncode = RunShellWithReturnCode(["git", "show", hash])
-      if returncode:
-        ErrorExit("Got error status from 'git show %s'" % hash)
+      hash = self.base_hashes[filename]
+      if hash == "0" * 40:  # All-zero hash indicates no base file.
+        status = "A"
+        base_content = ""
+      else:
+        status = "M"
+        base_content = RunShell(["git", "show", hash])
+
+    if filename in self.renames:
+      status = "A +"  # Match svn attribute name for renames.
+
     return (base_content, new_content, is_binary, status)
 
 
