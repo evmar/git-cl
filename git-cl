@@ -410,19 +410,20 @@ def UserEditedLog(starting_text):
   """Given some starting text, let the user edit it and return the result."""
   editor = os.getenv('EDITOR', 'vi')
 
-  file = tempfile.NamedTemporaryFile()
-  filename = file.name
+  (file_handle, filename) = tempfile.mkstemp()
+  file = os.fdopen(file_handle, 'w')
   file.write(starting_text)
-  file.flush()
+  file.close()
 
   ret = subprocess.call(editor + ' ' + filename, shell=True)
   if ret != 0:
+    os.remove(filename)
     return
 
-  file.flush()
-  file.seek(0)
+  file = open(filename)
   text = file.read()
   file.close()
+  os.remove(filename)
   stripcomment_re = re.compile(r'^#.*$', re.MULTILINE)
   return stripcomment_re.sub('', text).strip()
 
