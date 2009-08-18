@@ -353,17 +353,19 @@ def LoadCodereviewSettingsFromFile(file):
     k, v = line.split(": ", 1)
     settings[k] = v
 
-  def SetProperty(name, setting):
+  def SetProperty(name, setting, unset_error_ok=False):
     fullname = 'rietveld.' + name
     if setting in settings:
       RunGit(['config', fullname, settings[setting]])
     else:
-      RunGit(['config', '--unset-all', fullname])
+      RunGit(['config', '--unset-all', fullname], unset_error_ok)
 
   SetProperty('server', 'CODE_REVIEW_SERVER')
-  SetProperty('cc', 'CC_LIST')
-  SetProperty('tree-status-url', 'STATUS')
-  SetProperty('viewvc-url', 'VIEW_VC')
+  # Only server setting is required. Other settings can be absent.
+  # In that case, we ignore errors raised during option deletion attempt.
+  SetProperty('cc', 'CC_LIST', unset_error_ok=True)
+  SetProperty('tree-status-url', 'STATUS', unset_error_ok=True)
+  SetProperty('viewvc-url', 'VIEW_VC', unset_error_ok=True)
 
 
 def CmdConfig(args):
