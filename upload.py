@@ -66,6 +66,15 @@ verbosity = 1
 # Max size of patch or base file.
 MAX_UPLOAD_SIZE = 900 * 1024
 
+# Constants for version control names.  Used by GuessVCSName.
+VCS_GIT = "Git"
+VCS_MERCURIAL = "Mercurial"
+VCS_SUBVERSION = "Subversion"
+VCS_UNKNOWN = "Unknown"
+
+# whitelist for non-binary filetypes which do not start with "text/"
+TEXT_MIMETYPES = ['application/javascript', 'application/x-javascript']
+
 
 def GetEmail(prompt):
   """Prompts the user for their email address and returns it.
@@ -253,8 +262,8 @@ class AbstractRpcServer(object):
         us to the URL we provided.
 
     If we attempt to access the upload API without first obtaining an
-    authentication cookie, it returns a 401 response and directs us to
-    authenticate ourselves with ClientLogin.
+    authentication cookie, it returns a 401 response (or a 302) and
+    directs us to authenticate ourselves with ClientLogin.
     """
     for i in range(3):
       credentials = self.auth_function()
@@ -335,7 +344,7 @@ class AbstractRpcServer(object):
         except urllib2.HTTPError, e:
           if tries > 3:
             raise
-          elif e.code == 401:
+          elif e.code == 401 or e.code == 302:
             self._Authenticate()
 ##           elif e.code >= 500 and e.code < 600:
 ##             # Server Error - try again.
@@ -439,6 +448,9 @@ group.add_option("-r", "--reviewers", action="store", dest="reviewers",
 group.add_option("--cc", action="store", dest="cc",
                  metavar="CC", default=None,
                  help="Add CC (comma separated email addresses).")
+group.add_option("--private", action="store_true", dest="private",
+                 default=False,
+                 help="Make the issue restricted to reviewers and those CCed")
 # Upload options
 group = parser.add_option_group("Patch options")
 group.add_option("-m", "--message", action="store", dest="message",
@@ -724,6 +736,16 @@ class VersionControlSystem(object):
       return False
     return mimetype.startswith("image/")
 
+  def IsBinary(self, filename):
+    """Returns true if the guessed mimetyped isnt't in text group."""
+    mimetype = mimetypes.guess_type(filename)[0]
+    if not mimetype:
+      return False  # e.g. README, "real" binaries usually have an extension
+    # special case for text files which don't start with text/
+    if mimetype in TEXT_MIMETYPES:
+      return False
+    return not mimetype.startswith("text/")
+
 
 class SubversionVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Subversion."""
@@ -994,15 +1016,19 @@ class GitVCS(VersionControlSystem):
 
   def __init__(self, options):
     super(GitVCS, self).__init__(options)
-    # Map of filename -> hash of base file.
-    self.base_hashes = {}
+    # Map of filename -> (hash before, hash after) of base file.
+    # Hashes for "no such file" are represented as None.
+    self.hashes = {}
     # Map of new filename -> old filename for renames.
     self.renames = {}
 
   def GenerateDiff(self, extra_args):
     # This is more complicated than svn's GenerateDiff because we must convert
     # the diff output to include an svn-style "Index:" line as well as record
-    # the hashes of the base files, so we can upload them along with our diff.
+    # the hashes of the files, so we can upload them along with our diff.
+
+    # Special used by git to indicate "no such content".
+    NULL_HASH = "0"*40
 
     extra_args = extra_args[:]
     if self.options.revision:
@@ -1032,9 +1058,14 @@ class GitVCS(VersionControlSystem):
         # The "index" line in a git diff looks like this (long hashes elided):
         #   index 82c0d44..b2cee3f 100755
         # We want to save the left hash, as that identifies the base file.
-        match = re.match(r"index (\w+)\.\.", line)
+        match = re.match(r"index (\w+)\.\.(\w+)", line)
         if match:
-          self.base_hashes[filename] = match.group(1)
+          before, after = (match.group(1), match.group(2))
+          if before == NULL_HASH:
+            before = None
+          if after == NULL_HASH:
+            after = None
+          self.hashes[filename] = (before, after)
       svndiff.append(line + "\n")
     if not filecount:
       ErrorExit("No valid patches found in output from git diff")
@@ -1045,26 +1076,46 @@ class GitVCS(VersionControlSystem):
                       silent_ok=True)
     return status.splitlines()
 
+  def GetFileContent(self, file_hash, is_binary):
+    """Returns the content of a file identified by its git hash."""
+    data, retcode = RunShellWithReturnCode(["git", "show", file_hash],
+                                            universal_newlines=not is_binary)
+    if retcode:
+      ErrorExit("Got error status from 'git show %s'" % file_hash)
+    return data
+
   def GetBaseFile(self, filename):
+    hash_before, hash_after = self.hashes.get(filename, (None,None))
     base_content = None
     new_content = None
-    is_binary = False
+    is_binary = self.IsBinary(filename)
     status = None
-
-    if filename not in self.base_hashes and filename in self.renames:
-      # If a rename doesn't change the content, we never get a hash.
-      base_content = RunShell(["git", "show", filename])
-    else:
-      hash = self.base_hashes[filename]
-      if hash == "0" * 40:  # All-zero hash indicates no base file.
-        status = "A"
-        base_content = ""
-      else:
-        status = "M"
-        base_content = RunShell(["git", "show", hash])
 
     if filename in self.renames:
       status = "A +"  # Match svn attribute name for renames.
+      if filename not in self.hashes:
+        # If a rename doesn't change the content, we never get a hash.
+        base_content = RunShell(["git", "show", filename])
+    elif not hash_before:
+      status = "A"
+      base_content = ""
+    elif not hash_after:
+      status = "D"
+    else:
+      status = "M"
+
+    is_image = self.IsImage(filename)
+
+    # Grab the before/after content if we need it.
+    # We should include file contents if it's text or it's an image.
+    if not is_binary or is_image:
+      # Grab the base content if we don't have it already.
+      if base_content is None and hash_before:
+        base_content = self.GetFileContent(hash_before, is_binary)
+      # Only include the "after" file if it's an image; otherwise it
+      # it is reconstructed from the diff.
+      if is_image and hash_after:
+        new_content = self.GetFileContent(hash_after, is_binary)
 
     return (base_content, new_content, is_binary, status)
 
@@ -1151,8 +1202,12 @@ class MercurialVCS(VersionControlSystem):
       status = "M"
     else:
       status, _ = out[0].split(' ', 1)
+    if ":" in self.base_rev:
+      base_rev = self.base_rev.split(":", 1)[0]
+    else:
+      base_rev = self.base_rev
     if status != "A":
-      base_content = RunShell(["hg", "cat", "-r", self.base_rev, oldrelpath],
+      base_content = RunShell(["hg", "cat", "-r", base_rev, oldrelpath],
         silent_ok=True)
       is_binary = "\0" in base_content  # Mercurial's heuristic
     if status != "R":
@@ -1160,7 +1215,7 @@ class MercurialVCS(VersionControlSystem):
       is_binary = is_binary or "\0" in new_content
     if is_binary and base_content:
       # Fetch again without converting newlines
-      base_content = RunShell(["hg", "cat", "-r", self.base_rev, oldrelpath],
+      base_content = RunShell(["hg", "cat", "-r", base_rev, oldrelpath],
         silent_ok=True, universal_newlines=False)
     if not is_binary or not self.IsImage(relpath):
       new_content = None
@@ -1236,6 +1291,48 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
   return rv
 
 
+def GuessVCSName():
+  """Helper to guess the version control system.
+
+  This examines the current directory, guesses which VersionControlSystem
+  we're using, and returns an string indicating which VCS is detected.
+
+  Returns:
+    A pair (vcs, output).  vcs is a string indicating which VCS was detected
+    and is one of VCS_GIT, VCS_MERCURIAL, VCS_SUBVERSION, or VCS_UNKNOWN.
+    output is a string containing any interesting output from the vcs
+    detection routine, or None if there is nothing interesting.
+  """
+  # Mercurial has a command to get the base directory of a repository
+  # Try running it, but don't die if we don't have hg installed.
+  # NOTE: we try Mercurial first as it can sit on top of an SVN working copy.
+  try:
+    out, returncode = RunShellWithReturnCode(["hg", "root"])
+    if returncode == 0:
+      return (VCS_MERCURIAL, out.strip())
+  except OSError, (errno, message):
+    if errno != 2:  # ENOENT -- they don't have hg installed.
+      raise
+
+  # Subversion has a .svn in all working directories.
+  if os.path.isdir('.svn'):
+    logging.info("Guessed VCS = Subversion")
+    return (VCS_SUBVERSION, None)
+
+  # Git has a command to test if you're in a git tree.
+  # Try running it, but don't die if we don't have git installed.
+  try:
+    out, returncode = RunShellWithReturnCode(["git", "rev-parse",
+                                              "--is-inside-work-tree"])
+    if returncode == 0:
+      return (VCS_GIT, None)
+  except OSError, (errno, message):
+    if errno != 2:  # ENOENT -- they don't have git installed.
+      raise
+
+  return (VCS_UNKNOWN, None)
+
+
 def GuessVCS(options):
   """Helper to guess the version control system.
 
@@ -1246,32 +1343,13 @@ def GuessVCS(options):
   Returns:
     A VersionControlSystem instance. Exits if the VCS can't be guessed.
   """
-  # Mercurial has a command to get the base directory of a repository
-  # Try running it, but don't die if we don't have hg installed.
-  # NOTE: we try Mercurial first as it can sit on top of an SVN working copy.
-  try:
-    out, returncode = RunShellWithReturnCode(["hg", "root"])
-    if returncode == 0:
-      return MercurialVCS(options, out.strip())
-  except OSError, (errno, message):
-    if errno != 2:  # ENOENT -- they don't have hg installed.
-      raise
-
-  # Subversion has a .svn in all working directories.
-  if os.path.isdir('.svn'):
-    logging.info("Guessed VCS = Subversion")
+  (vcs, extra_output) = GuessVCSName()
+  if vcs == VCS_MERCURIAL:
+    return MercurialVCS(options, extra_output)
+  elif vcs == VCS_SUBVERSION:
     return SubversionVCS(options)
-
-  # Git has a command to test if you're in a git tree.
-  # Try running it, but don't die if we don't have git installed.
-  try:
-    out, returncode = RunShellWithReturnCode(["git", "rev-parse",
-                                              "--is-inside-work-tree"])
-    if returncode == 0:
-      return GitVCS(options)
-  except OSError, (errno, message):
-    if errno != 2:  # ENOENT -- they don't have git installed.
-      raise
+  elif vcs == VCS_GIT:
+    return GitVCS(options)
 
   ErrorExit(("Could not guess version control system. "
              "Are you in a working copy directory?"))
@@ -1361,6 +1439,11 @@ def RealMain(argv, data=None):
         base_hashes += "|"
       base_hashes += checksum + ":" + file
   form_fields.append(("base_hashes", base_hashes))
+  if options.private:
+    if options.issue:
+      print "Warning: Private flag ignored when updating an existing issue."
+    else:
+      form_fields.append(("private", "1"))
   # If we're uploading base files, don't send the email before the uploads, so
   # that it contains the file status.
   if options.send_mail and options.download_base:
