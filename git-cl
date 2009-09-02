@@ -382,23 +382,39 @@ def CmdConfig(args):
 
 
 def CmdStatus(args):
-  branches = RunGit(['for-each-ref', '--format=%(refname)', 'refs/heads'])
-  if branches:
-    print 'Branches associated with reviews:'
-    for branch in sorted(branches.splitlines()):
-      cl = Changelist(branchref=branch)
-      print "  %10s: %s" % (cl.GetBranch(), cl.GetIssue())
+  parser = optparse.OptionParser(usage='git cl status [options]')
+  parser.add_option('--field', help='print only specific field (desc|id|url)')
+  (options, args) = parser.parse_args(args)
+
+  # TODO: maybe make show_branches a flag if necessary.
+  show_branches = not options.field
+
+  if show_branches:
+    branches = RunGit(['for-each-ref', '--format=%(refname)', 'refs/heads'])
+    if branches:
+      print 'Branches associated with reviews:'
+      for branch in sorted(branches.splitlines()):
+        cl = Changelist(branchref=branch)
+        print "  %10s: %s" % (cl.GetBranch(), cl.GetIssue())
 
   cl = Changelist()
-  print
-  print 'Current branch:',
-  if not cl.GetIssue():
-    print 'no issue assigned.'
-    return 0
-  print cl.GetBranch()
-  print 'Issue number:', cl.GetIssue(), '(%s)' % cl.GetIssueURL()
-  print 'Issue description:'
-  print cl.GetDescription(pretty=True)
+  if options.field:
+    if options.field.startswith('desc'):
+      print cl.GetDescription()
+    elif options.field == 'id':
+      print cl.GetIssue()
+    elif options.field == 'url':
+      print cl.GetIssueURL()
+  else:
+    print
+    print 'Current branch:',
+    if not cl.GetIssue():
+      print 'no issue assigned.'
+      return 0
+    print cl.GetBranch()
+    print 'Issue number:', cl.GetIssue(), '(%s)' % cl.GetIssueURL()
+    print 'Issue description:'
+    print cl.GetDescription(pretty=True)
 
 
 def CmdIssue(args):
