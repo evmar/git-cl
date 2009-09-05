@@ -108,7 +108,7 @@ class Settings:
         # want to go through all of history, so read a line from the
         # pipe at a time.
         # The -100 is an arbitrary limit so we don't search forever.
-        cmd = ['git', 'log', '-100']
+        cmd = ['git', 'log', '-100', '--pretty=medium']
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
         for line in proc.stdout:
           match = git_svn_re.match(line)
