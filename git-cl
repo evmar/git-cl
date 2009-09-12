@@ -620,7 +620,7 @@ def CmdDCommit(args):
     RunGit(['merge', '--squash', cl.GetBranchRef()])
     RunGit(['commit', '-m', description])
     # dcommit the merge branch.
-    output = RunGit(['svn', 'dcommit'])
+    output = RunGit(['svn', 'dcommit', '--no-rebase'])
   finally:
     # And then swap back to the original branch and clean up.
     RunGit(['checkout', '-q', cl.GetBranch()])
