@@ -456,6 +456,10 @@ def CmdUpload(args):
                     help='send email to reviewer immediately')
   (options, args) = parser.parse_args(args)
 
+  if RunGit(['diff-index', 'HEAD']):
+    print 'Cannot upload with a dirty tree.  You must commit locally first.'
+    return 1
+
   cl = Changelist()
   if not args:
     # Default to diffing against the "upstream" branch.
