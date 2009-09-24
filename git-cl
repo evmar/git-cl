@@ -418,6 +418,11 @@ def CmdStatus(args):
 
 
 def CmdIssue(args):
+  parser = optparse.OptionParser(usage='git cl issue [issue_number]')
+  parser.description = ('Set or display the current code review issue. ' +
+                        'Pass issue number 0 to clear the current issue.')
+  (options, args) = parser.parse_args(args)
+
   cl = Changelist()
   if len(args) > 0:
     cl.SetIssue(int(args[0]))
