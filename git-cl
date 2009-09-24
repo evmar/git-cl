@@ -463,7 +463,7 @@ def CmdUpload(args):
   cl = Changelist()
   if not args:
     # Default to diffing against the "upstream" branch.
-    args = [cl.GetUpstreamBranch()]
+    args = [cl.GetUpstreamBranch() + "..."]
   # --no-ext-diff is broken in some versions of Git, so try to work around
   # this by overriding the environment (but there is still a problem if the
   # git config key "diff.external" is used).
