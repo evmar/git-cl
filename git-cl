@@ -20,15 +20,16 @@ except ImportError:
   pass
 
 DEFAULT_SERVER = 'codereview.appspot.com'
+PREDCOMMIT_HOOK = '.git/hooks/pre-cl-dcommit'
+PREUPLOAD_HOOK = '.git/hooks/pre-cl-upload'
 
 def DieWithError(message):
   print >>sys.stderr, message
   sys.exit(1)
 
 
-def RunGit(args, error_ok=False, error_message=None, exit_code=False,
-           redirect_stdout=True):
-  cmd = ['git'] + args
+def RunCommand(cmd, error_ok=False, error_message=None, exit_code=False,
+               redirect_stdout=True):
   # Useful for debugging:
   # print >>sys.stderr, ' '.join(cmd)
   if redirect_stdout:
@@ -45,10 +46,16 @@ def RunGit(args, error_ok=False, error_message=None, exit_code=False,
   return output
 
 
+def RunGit(args, **kwargs):
+  cmd = ['git'] + args
+  return RunCommand(cmd, kwargs)
+
+
 class Settings:
   def __init__(self):
     self.server = None
     self.cc = None
+    self.root = None
     self.is_git_svn = None
     self.svn_branch = None
     self.tree_status_url = None
@@ -69,6 +76,11 @@ class Settings:
     if self.cc is None:
       self.cc = self._GetConfig('rietveld.cc', error_ok=True)
     return self.cc
+
+  def GetRoot(self):
+    if not self.root:
+      self.root = os.path.abspath(RunGit(['rev-parse', '--show-cdup']).strip())
+    return self.root
 
   def GetIsGitSvn(self):
     """Return true if this repo looks like it's using git-svn."""
@@ -353,6 +365,9 @@ def LoadCodereviewSettingsFromFile(file):
     k, v = line.split(": ", 1)
     settings[k] = v
 
+  def GetProperty(name):
+    return settings.get(name)
+
   def SetProperty(name, setting, unset_error_ok=False):
     fullname = 'rietveld.' + name
     if setting in settings:
@@ -366,19 +381,44 @@ def LoadCodereviewSettingsFromFile(file):
   SetProperty('cc', 'CC_LIST', unset_error_ok=True)
   SetProperty('tree-status-url', 'STATUS', unset_error_ok=True)
   SetProperty('viewvc-url', 'VIEW_VC', unset_error_ok=True)
+  hooks = {}
+  if GetProperty('GITCL_PREUPLOAD'):
+    hooks['preupload'] = GetProperty('GITCL_PREUPLOAD')
+  if GetProperty('GITCL_PREDCOMMIT'):
+    hooks['predcommit'] = GetProperty('GITCL_PREDCOMMIT')
+  return hooks
 
 
 def CmdConfig(args):
+  def DownloadToFile(url, filename):
+    filename = os.path.join(settings.GetRoot(), filename)
+    if os.path.exists(filename):
+      print '%s exists, skipping' % filename
+      return False
+    contents = urllib2.urlopen(url).read()
+    file = open(filename, 'w')
+    file.write(contents)
+    file.close()
+    os.chmod(filename, 0755)
+    return True
+
   parser = optparse.OptionParser(
       usage='git cl config [repo root containing codereview.settings]')
   (options, args) = parser.parse_args(args)
-  if len(args) > 0:
-    url = args[0]
-    if not url.endswith('codereview.settings'):
-      url = os.path.join(url, 'codereview.settings')
-    LoadCodereviewSettingsFromFile(urllib2.urlopen(url))
-  else:
+  if len(args) == 0:
     GetCodereviewSettingsInteractively()
+    return
+
+  url = args[0]
+  if not url.endswith('codereview.settings'):
+    url = os.path.join(url, 'codereview.settings')
+
+  # Load Codereview settings and download hooks (if available).
+  hooks = LoadCodereviewSettingsFromFile(urllib2.urlopen(url))
+  for key, filename in (('predcommit', PREDCOMMIT_HOOK),
+                        ('preupload', PREUPLOAD_HOOK)):
+    if key in hooks:
+      DownloadToFile(hooks[key], filename)
 
 
 def CmdStatus(args):
@@ -451,9 +491,38 @@ def UserEditedLog(starting_text):
   return stripcomment_re.sub('', text).strip()
 
 
+def RunHook(hook, upstream_branch='origin', error_ok=False):
+  """Run a given hook if it exists.  By default, we fail on errors."""
+  hook = '%s/%s' % (settings.GetRoot(), hook)
+  if not os.path.exists(hook):
+    return
+  output = RunCommand([hook, upstream_branch], error_ok).strip()
+  if output != '':
+    print output
+
+
+def CmdPresubmit(args):
+  """Reports what presubmit checks on the change would report."""
+  parser = optparse.OptionParser(
+      usage='git cl presubmit [options]')
+  (options, args) = parser.parse_args(args)
+
+  if RunGit(['diff-index', 'HEAD']):
+    print 'Cannot presubmit with a dirty tree.  You must commit locally first.'
+    return 1
+
+  print '*** Presubmit checks for UPLOAD would report: ***'
+  RunHook(PREUPLOAD_HOOK, error_ok=True)
+
+  print '*** Presubmit checks for DCOMMIT would report: ***'
+  RunHook(PREDCOMMIT_HOOK, error_ok=True)
+
+
 def CmdUpload(args):
   parser = optparse.OptionParser(
       usage='git cl upload [options] [args to "git diff"]')
+  parser.add_option('--bypass-hooks', action='store_true', dest='bypass_hooks',
+                    help='bypass upload presubmit hook')
   parser.add_option('-m', dest='message', help='message for patch')
   parser.add_option('-r', '--reviewers',
                     help='reviewer email addresses')
@@ -466,9 +535,16 @@ def CmdUpload(args):
     return 1
 
   cl = Changelist()
-  if not args:
+  if args:
+    base_branch = args[0]
+  else:
     # Default to diffing against the "upstream" branch.
-    args = [cl.GetUpstreamBranch() + "..."]
+    base_branch = cl.GetUpstreamBranch()
+    args = [base_branch + "..."]
+
+  if not options.bypass_hooks:
+    RunHook(PREUPLOAD_HOOK, upstream_branch=base_branch, error_ok=False)
+
   # --no-ext-diff is broken in some versions of Git, so try to work around
   # this by overriding the environment (but there is still a problem if the
   # git config key "diff.external" is used).
@@ -522,6 +598,8 @@ def CmdUpload(args):
 def CmdDCommit(args):
   parser = optparse.OptionParser(
       usage='git cl dcommit [options] [git-svn branch to apply against]')
+  parser.add_option('--bypass-hooks', action='store_true', dest='bypass_hooks',
+                    help='bypass upload presubmit hook')
   parser.add_option('-m', dest='message',
                     help="override review description")
   parser.add_option('-f', action='store_true', dest='force',
@@ -555,6 +633,9 @@ def CmdDCommit(args):
            'not in this branch.' % (base_branch, len(upstream_commits)))
     print 'Run "git merge %s" before attempting to dcommit.' % base_branch
     return 1
+
+  if not options.force and not options.bypass_hooks:
+    RunHook(PREDCOMMIT_HOOK, upstream_branch=base_branch, error_ok=False)
 
   if not options.force:
     # Check the tree status if the tree status URL is set.
@@ -755,13 +836,14 @@ def CmdUpstream(args):
 
 COMMANDS = [
   ('config',  'edit configuration for this tree',            CmdConfig),
-  ('status',  'show status of changelists',                  CmdStatus),
-  ('issue',   'show/set current branch\'s issue number',     CmdIssue),
-  ('upload',  'upload the current changelist to codereview', CmdUpload),
   ('dcommit', 'commit the current changelist via git-svn',   CmdDCommit),
+  ('issue',   'show/set current branch\'s issue number',     CmdIssue),
   ('patch',   'patch in a code review',                      CmdPatch),
+  ('presubmit', 'run presubmit tests on the current changelist', CmdPresubmit),
   ('rebase',  'rebase current branch on top of svn repo',    CmdRebase),
+  ('status',  'show status of changelists',                  CmdStatus),
   ('tree',    'show the status of the tree',                 CmdTreeStatus),
+  ('upload',  'upload the current changelist to codereview', CmdUpload),
   ('upstream', 'print the name of the upstream branch, if any', CmdUpstream),
 ]
 

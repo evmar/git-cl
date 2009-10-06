@@ -48,3 +48,14 @@ test_expect_success() {
     return $exit_code
   fi
 }
+
+# Usage: test_expect_failure "description of test" "test code".
+test_expect_failure() {
+  echo "TESTING: $1"
+  exit_code=0
+  sh -c "$2" || exit_code=$?
+  if [ $exit_code = 0 ]; then
+    echo "SUCCESS, BUT EXPECTED FAILURE: $1"
+    return $exit_code
+  fi
+}
