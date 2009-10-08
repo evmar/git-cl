@@ -48,7 +48,7 @@ def RunCommand(cmd, error_ok=False, error_message=None, exit_code=False,
 
 def RunGit(args, **kwargs):
   cmd = ['git'] + args
-  return RunCommand(cmd, kwargs)
+  return RunCommand(cmd, **kwargs)
 
 
 class Settings:
