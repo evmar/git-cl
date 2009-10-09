@@ -373,7 +373,7 @@ def LoadCodereviewSettingsFromFile(file):
     if setting in settings:
       RunGit(['config', fullname, settings[setting]])
     else:
-      RunGit(['config', '--unset-all', fullname], unset_error_ok)
+      RunGit(['config', '--unset-all', fullname], error_ok=unset_error_ok)
 
   SetProperty('server', 'CODE_REVIEW_SERVER')
   # Only server setting is required. Other settings can be absent.
