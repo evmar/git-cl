@@ -637,7 +637,6 @@ def CmdDCommit(args):
   if not options.force and not options.bypass_hooks:
     RunHook(PREDCOMMIT_HOOK, upstream_branch=base_branch, error_ok=False)
 
-  if not options.force:
     # Check the tree status if the tree status URL is set.
     status = GetTreeStatus()
     if 'closed' == status:
