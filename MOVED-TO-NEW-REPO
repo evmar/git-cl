@@ -1,0 +1,13 @@
+git-cl was originally written for use in the development of Google
+Chrome.  Since I released it, git-cl was adopted by the Chrome team
+and merged into their development repositories, and this public repo
+was abandoned.
+
+If you'd like to find the version of the code from before its
+relocation, you can checkout master~1 from this repo.
+
+Otherwise, for the current version (which may have some Chrome-isms in
+it, I'm not sure) you'll want to find Chrome's "depot_tools"
+repository, which currently lives at
+  https://chromium.googlesource.com/chromium/tools/depot_tools.git
+
